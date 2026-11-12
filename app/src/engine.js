@@ -54,6 +54,7 @@ export class Observatory {
     };
     this.observer = new ResizeObserver(this.resize); this.observer.observe(canvas);
     this.move = e => {
+      if (this.config.interactive === false) return;
       const b = canvas.getBoundingClientRect(); this.setPointer(e.clientX - b.x, e.clientY - b.y);
       if (this.drag) {
         this.orbit.targetYaw += (e.clientX - this.drag.x) * .006;
@@ -62,7 +63,7 @@ export class Observatory {
       }
     };
     this.leave = () => { this.pointer.x = -1000; };
-    this.down = e => { this.drag = { x: e.clientX, y: e.clientY }; canvas.setPointerCapture?.(e.pointerId); this.triggerImpulse(); };
+    this.down = e => { if (this.config.interactive === false) return; const b=canvas.getBoundingClientRect();this.setPointer(e.clientX-b.x,e.clientY-b.y);this.drag = { x: e.clientX, y: e.clientY }; canvas.setPointerCapture?.(e.pointerId); this.triggerImpulse(); };
     this.up = () => { this.drag = null; };
     this.click = () => {};
     canvas.addEventListener('pointermove', this.move); canvas.addEventListener('pointerleave', this.leave); canvas.addEventListener('click', this.click);

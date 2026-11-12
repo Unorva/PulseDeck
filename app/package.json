@@ -1,6 +1,9 @@
 {
   "name": "pulsedeck",
-  "version": "0.0.0",
+  "version": "0.2.0",
+  "description": "PulseDeck Windows desktop wallpaper and live hardware observatory",
+  "author": "Unorva",
+  "main": "electron/main.mjs",
   "private": true,
   "type": "module",
   "scripts": {
@@ -8,20 +11,63 @@
     "build": "vite build && node scripts/prepare-sites-build.mjs",
     "preview": "node server/serve.mjs",
     "start": "node server/serve.mjs",
-    "test": "node --test tests/telemetry.test.mjs tests/core-field.test.mjs",
+    "icons": "node scripts/create-app-icon.mjs",
+    "desktop": "electron .",
+    "desktop:prepare": "npm run icons && npm run build",
+    "package:win": "npm run desktop:prepare && electron-builder --win nsis portable --x64 --publish never",
+    "package:dir": "npm run desktop:prepare && electron-builder --win dir --x64 --publish never",
+    "test": "node --test tests/telemetry.test.mjs tests/core-field.test.mjs tests/preferences.test.mjs",
     "test:sites": "node --test tests/sites-worker.test.mjs"
   },
+  "build": {
+    "appId": "com.unorva.pulsedeck",
+    "productName": "PulseDeck",
+    "directories": {
+      "output": "../release"
+    },
+    "files": [
+      "dist/client/**/*",
+      "electron/**/*",
+      "server/telemetry.mjs",
+      "shared/**/*",
+      "package.json"
+    ],
+    "asarUnpack": [
+      "node_modules/koffi/**/*"
+    ],
+    "win": {
+      "icon": "electron/assets/icon.ico",
+      "target": [
+        "nsis",
+        "portable"
+      ],
+      "signAndEditExecutable": false
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "artifactName": "PulseDeck-Setup-${version}-${arch}.${ext}"
+    },
+    "portable": {
+      "artifactName": "PulseDeck-Portable-${version}-${arch}.${ext}"
+    }
+  },
   "dependencies": {
+    "koffi": "3.3.7",
+    "systeminformation": "^5.33.19"
+  },
+  "devDependencies": {
+    "@resvg/resvg-js": "2.6.2",
+    "electron": "45.3.1",
+    "electron-builder": "26.18.0",
     "@phosphor-icons/react": "^2.1.10",
     "@vitejs/plugin-react": "5.0.4",
     "html-to-image": "^1.11.13",
     "react": "19.2.0",
     "react-dom": "19.2.0",
-    "systeminformation": "^5.33.19",
     "vite": "6.4.2"
-  },
-  "devDependencies": {
-    "electron": "45.3.1",
-    "electron-builder": "26.18.0"
   }
 }
