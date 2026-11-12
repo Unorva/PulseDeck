@@ -19,7 +19,7 @@ test('core-to-field transport crosses the ring without a discontinuity in every 
 test('all five outlets lie on the same computation ring', () => {
   for (let band = 0; band < 5; band++) {
     const [x, y] = portPosition(band, 8, core);
-    assert.ok(Math.abs(Math.hypot(x - core.x, y - core.y) - core.radius * .982) < 1e-6);
+    assert.ok(Math.abs(Math.hypot(x - core.x, y - core.y) - core.radius * 1.025) < 1e-6);
   }
 });
 test('neural impulse propagates outward and decays rather than lighting everything at once', () => {

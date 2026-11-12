@@ -57,8 +57,9 @@ const metricMeta = [
   { key: 'download', label: '下载', en: 'DOWNLINK' },
   { key: 'upload', label: '上传', en: 'UPLINK' },
 ];
-export function App() {
-  const [config, setConfig] = useState(loadSettings);
+export function App({displayOnly=false,preferencesOverride=null}) {
+  const [localConfig, setConfig] = useState(loadSettings);
+  const config=preferencesOverride||localConfig;
   const [settings, setSettings] = useState(false), [detail, setDetail] = useState(null);
   const [immersive, setImmersive] = useState(false), [fullscreen, setFullscreen] = useState(false);
   const [fps, setFps] = useState(0), [toast, setToast] = useState(''), [exporting, setExporting] = useState(false);
@@ -70,8 +71,9 @@ export function App() {
   const connected = state === 'live';
   const update = (key, value) => setConfig(c => ({ ...c, [key]: value }));
   useEffect(() => { engine.current = new Observatory(canvas.current, setFps, particleCanvas.current); return () => engine.current.dispose(); }, []);
-  useEffect(() => { engine.current?.setConfig(config); localStorage.setItem('pulsedeck.settings.v1', JSON.stringify({ ...config, paused: false })); }, [config]);
+  useEffect(() => { engine.current?.setConfig({...config,clean:displayOnly&&!config.showLabels}); if(!preferencesOverride)localStorage.setItem('pulsedeck.settings.v1', JSON.stringify({ ...config, paused: false })); }, [config,displayOnly]);
   useEffect(() => { engine.current?.setMetrics({ ...metric, sequence: data?.sequence }); }, [data]);
+  useEffect(()=>window.pulseDeck?.onPointer?.(point=>engine.current?.externalPointer(point)),[]);
   useEffect(() => { if (!toast) return; const timer = setTimeout(() => setToast(''), 3500); return () => clearTimeout(timer); }, [toast]);
   useEffect(() => { const sync = () => setFullscreen(Boolean(document.fullscreenElement)); document.addEventListener('fullscreenchange', sync); return () => document.removeEventListener('fullscreenchange', sync); }, []);
   const toggleFullscreen = async () => {
@@ -106,8 +108,8 @@ export function App() {
   const display = key => key === 'download' || key === 'upload' ? formatRate(metric[key]) : formatPercent(metric[key]);
   const statusLabel = connected ? '本机实时连接' : state === 'connecting' ? '正在连接本机' : '遥测连接中断';
   const overload = metricMeta.filter(m => config.thresholds[m.key] && Number.isFinite(metric[m.key]) && metric[m.key] >= config.thresholds[m.key]);
-  return <main ref={root} className={`observatory ${immersive ? 'immersive' : ''}`} style={{ '--accent': palette.css }} data-mode={config.mode}>
-    <header className="topbar">
+  return <main ref={root} className={`observatory ${immersive ? 'immersive' : ''} ${displayOnly?'wallpaper-presentation':''}`} style={{ '--accent': palette.css }} data-mode={config.mode}>
+    {!displayOnly&&<header className="topbar">
       <div className="brand"><Atom size={26} weight="thin" /><h1>PULSEDECK</h1><span className="brand-sub">SYSTEM<br />OBSERVATORY</span></div>
       <div className={`connection ${connected ? 'live' : 'offline'}`}><i />{statusLabel}<span>{data ? `${age.toFixed(1)}s AGO` : 'LOCAL ONLY'}</span></div>
       <nav className="toolbar" aria-label="观测控制">
@@ -118,18 +120,17 @@ export function App() {
         <div className="palette-controls" aria-label="动效配色">{Object.entries(palettes).map(([key, p]) => <button key={key} aria-label={p.name} title={p.name} aria-pressed={config.palette === key} className={config.palette === key ? 'active' : ''} onClick={() => update('palette', key)}><i style={{ background: p.css }} /><span>{p.name}</span></button>)}</div>
         <button className={settings ? 'active' : ''} onClick={() => setSettings(true)}><SlidersHorizontal size={14} /><span>参数</span></button>
       </nav>
-    </header>
+    </header>}
     <section className="stage" aria-label="实时动态可视化">
       <canvas ref={particleCanvas} className="particle-field" aria-hidden="true" />
       <canvas ref={canvas} className="universe" role="img" aria-label={`${mode.name}：由本机硬件数据驱动的神经网络与粒子流，可移动指针或点击扰动流场`} />
-      <div className="mode-tabs" role="group" aria-label="可视化模式">{modes.map((m, i) => <button key={m.id} aria-pressed={config.mode === m.id} className={config.mode === m.id ? 'active' : ''} onClick={() => update('mode', m.id)} title={`${i + 1}：${m.name}`}><span className="mode-number">0{i + 1}</span>{m.name}</button>)}</div>
-      <div className="metric-rail">{metricMeta.map((m, i) => <button className={`rail-item ${overload.some(o => o.key === m.key) ? 'overload' : ''}`} key={m.key} onClick={() => setDetail(m.key)} aria-label={`查看${m.label}详情`}><span className="rail-top">{m.label}<em>0{i + 1}</em></span><strong><MetricValue text={display(m.key)} /></strong><span className="rail-bottom">{Number.isFinite(metric[m.key]) ? '实时采样 / 并行计算' : '等待可用数据'}</span></button>)}</div>
-      <div className="stage-corner"><span className="crosshair" /><span>LIVE FIELD / {mode.en}</span></div>
-      <button className="pulse-button" onClick={() => { engine.current.impulse = 1; engine.current.pointer = { x: engine.current.w * .715, y: engine.current.h * .51 }; setTimeout(() => { if (engine.current) engine.current.pointer.x = -1000; }, 1800); }}><Lightning size={11} />注入脉冲</button>
-      {config.paused && <div className="paused-indicator">视觉运动已暂停 · 遥测持续采样</div>}
-      {!!overload.length && <div className="overload-indicator">{overload.map(m => m.label).join(' / ')}负载超过提示阈值</div>}
+      {!displayOnly&&<div className="mode-tabs" role="group" aria-label="可视化模式">{modes.map((m, i) => <button key={m.id} aria-pressed={config.mode === m.id} className={config.mode === m.id ? 'active' : ''} onClick={() => update('mode', m.id)} title={`${i + 1}：${m.name}`}><span className="mode-number">0{i + 1}</span>{m.name}</button>)}</div>}
+      {(!displayOnly||config.showMetrics)&&<div className="metric-rail">{metricMeta.map((m, i) => <button tabIndex={displayOnly?-1:0} className={`rail-item ${overload.some(o => o.key === m.key) ? 'overload' : ''}`} key={m.key} onClick={() => {if(!displayOnly)setDetail(m.key);}} aria-label={`查看${m.label}详情`}><span className="rail-top">{m.label}<em>0{i + 1}</em></span><strong><MetricValue text={display(m.key)} /></strong><span className="rail-bottom">{Number.isFinite(metric[m.key]) ? '实时采样 / 并行计算' : '等待可用数据'}</span></button>)}</div>}
+      {!displayOnly&&<><div className="stage-corner"><span className="crosshair" /><span>LIVE FIELD / {mode.en}</span></div><button className="pulse-button" onClick={() =>engine.current.triggerImpulse(engine.current.cx,engine.current.cy)}><Lightning size={11} />注入脉冲</button></>}
+      {!displayOnly&&config.paused && <div className="paused-indicator">视觉运动已暂停 · 遥测持续采样</div>}
+      {!displayOnly&&!!overload.length && <div className="overload-indicator">{overload.map(m => m.label).join(' / ')}负载超过提示阈值</div>}
     </section>
-    <section className="monitor-grid" aria-label="系统实时监测">
+    {(!displayOnly||config.showMonitors)&&<section className="monitor-grid" aria-label="系统实时监测">
       <article className="monitor-card cpu-card">
         <CardHeading number="01" sub="处理器监测" title="处理器" value={display('cpu')} onClick={() => setDetail('cpu')} />
         <div className="cpu-body"><div className="process-list">{data?.processes?.length ? data.processes.slice(0, 4).map((p, i) => <div key={p.pid + '-' + i}><span title={p.name}>{p.name}</span><i style={{ width: `${Math.max(1, Math.min(100, p.cpu))}%` }} /><b>{p.cpu.toFixed(1)}%</b></div>) : <p className="empty-label">{hardware.cpu || '正在读取处理器信息…'}</p>}</div><div className="core-grid">{(metric.cores || Array(16).fill(null)).slice(0, 32).map((v, i) => <div key={i} style={{ backgroundColor: `color-mix(in srgb, var(--accent) ${Number.isFinite(v) ? 8 + v * .55 : 4}%, transparent)` }}><span>C{i}</span><b>{Number.isFinite(v) ? Math.round(v) + '%' : '—'}</b></div>)}</div></div>
@@ -155,8 +156,8 @@ export function App() {
         <div className="sampling-body"><div className="event-list">{events.slice(0, 3).map(e => <p key={e.id}><time>{e.time}</time><span>{e.message}</span></p>)}{!events.length && <p>等待首个有效硬件样本…</p>}</div><div className="sample-bars">{history.cpu.slice(-24).map((v, i) => <i key={i} style={{ height: `${Number.isFinite(v) ? Math.max(8, v) : 5}%`, opacity: .2 + i / 36 }} />)}</div></div>
         <div className="card-foot"><span>1 Hz / {connected ? '本机只读采集' : '自动重连中'}</span><span>{data?.timestamp ? new Date(data.timestamp).toLocaleTimeString('en-GB') : '—'}</span></div>
       </article>
-    </section>
-    <footer className="statusbar"><span><i className={connected ? 'status-dot live' : 'status-dot'} />{connected ? 'LIVE' : 'OFFLINE'} / READ ONLY <b>{hardware.cpu || 'LOCAL TELEMETRY'}</b></span><span>{config.particles.toLocaleString()} PARTICLES / {mode.en} / {fps} FPS / {engine.current?.field.gl ? 'WEBGL' : 'CANVAS 2D'}</span><span className="keyboard-hint">1–5 切换 · SPACE 暂停 · H 沉浸</span></footer>
+    </section>}
+    {!displayOnly&&<footer className="statusbar"><span><i className={connected ? 'status-dot live' : 'status-dot'} />{connected ? 'LIVE' : 'OFFLINE'} / READ ONLY <b>{hardware.cpu || 'LOCAL TELEMETRY'}</b></span><span>{config.particles.toLocaleString()} PARTICLES / {mode.en} / {fps} FPS / {engine.current?.field.gl ? 'WEBGL' : 'CANVAS 2D'}</span><span className="keyboard-hint">1–5 切换 · SPACE 暂停 · H 沉浸</span></footer>}
     {settings && <Dialog title="调节流动" onClose={() => setSettings(false)} className="settings-dialog">
       <p className="settings-description">让计算变得可见。神经网络、计算圆环与粒子流随本机负载持续演化。</p>
       <div className="settings-section"><span className="eyebrow">VISUAL CONTROLS</span>

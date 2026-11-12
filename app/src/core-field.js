@@ -10,7 +10,7 @@ export function wellPosition(index, time, x, y, scale) {
 }
 export function portPosition(band, time, core) {
   const angle = (band - 2) * .22 + Math.sin(time * .13 + band) * .055;
-  return [core.x + Math.cos(angle) * core.radius * .982, core.y + Math.sin(angle) * core.radius * .982];
+  return [core.x + Math.cos(angle) * core.radius * 1.025, core.y + Math.sin(angle) * core.radius * 1.025];
 }
 // Every transport particle begins inside the neural core, crosses an actual
 // ring outlet, and continues along the selected engine's path. Both renderers
@@ -27,11 +27,12 @@ export function transportPosition(p, phase, time, core, field, mode) {
   const u = (phase - .16) / .84;
   const { x, y, width, scale } = field;
   const reach = x - port[0];
+  const normal=[(port[0]-core.x)/core.radius,(port[1]-core.y)/core.radius];
   if (mode === 'threebody' || mode === 'fusion') {
     const well = mode === 'threebody' ? wellPosition(p.band % 3, time, x, y, scale) : [x, y];
     if (u < .60) {
       const q = u / .60;
-      return bezier(port, [port[0] + reach * .31, port[1] + noise], [well[0] - reach * .22, well[1] + (p.band - 2) * 11 + noise * .35], [well[0], well[1] + noise * .12], q);
+      return bezier(port, [port[0] + normal[0]*reach*.32, port[1] + normal[1]*reach*.32+noise*.2], [well[0] - reach * .22, well[1] + (p.band - 2) * 11 + noise * .35], [well[0], well[1] + noise * .12], q);
     }
     const q = (u - .60) / .40;
     const exit = [x + width * .69, y + Math.sin(p.band * 1.25 + time * .14) * scale * 1.16 + noise];
@@ -61,7 +62,7 @@ export function waveEnergy(point, waves, time, radius) {
     if (age < 0 || age > 3.5) continue;
     const distance = Math.hypot(point.x - wave.x, point.y - wave.y);
     const front = age * radius * 1.7;
-    energy += Math.exp(-(((distance - front) / (radius * .075 + 3)) ** 2)) * Math.exp(-age * .65);
+    energy += Math.exp(-(((distance - front) / (radius * .075 + 3)) ** 2)) * Math.exp(-age * .65) * (wave.automatic ? .22 : 1);
   }
   return Math.min(1.5, energy);
 }

@@ -1,7 +1,9 @@
 export const defaultPreferences = Object.freeze({
   mode: 'threebody', palette: 'silver', speed: 1, particles: 16000, glow: 1,
   cadence: 1, neural: true, paused: false, fps: 60, interactive: true,
-  showMetrics: false, showLabels: false, showMonitors: false,
+  showMetrics: true, showLabels: true, showMonitors: true,
+  ringWidth: 1.4, gravityStrength: 1,
+  layoutVersion: 3,
   wallpaperEnabled: false, selectedDisplay: 'primary', pauseOnFullscreen: true,
   pauseOnBattery: false, startAtLogin: false,
   thresholds: { cpu: 85, memory: 85, gpu: 90 },
@@ -10,7 +12,8 @@ const booleanKeys = ['neural','paused','interactive','showMetrics','showLabels',
 export function sanitizePreferences(input = {}) {
   const result = { ...defaultPreferences, thresholds: { ...defaultPreferences.thresholds } };
   for (const key of booleanKeys) if (typeof input[key] === 'boolean') result[key] = input[key];
-  for (const [key,min,max] of [['speed',.2,3],['particles',2000,24000],['glow',0,2],['cadence',.2,3]]) if (Number.isFinite(input[key])) result[key] = Math.max(min,Math.min(max,input[key]));
+  if(input.layoutVersion!==3){result.showMetrics=true;result.showMonitors=true;result.showLabels=true;}
+  for (const [key,min,max] of [['speed',.2,3],['particles',2000,24000],['glow',0,2],['cadence',.2,3],['ringWidth',.8,1.8],['gravityStrength',.2,2.5]]) if (Number.isFinite(input[key])) result[key] = Math.max(min,Math.min(max,input[key]));
   result.particles = Math.round(result.particles/1000)*1000;
   if (['flow','blackhole','fusion','threebody','neural'].includes(input.mode)) result.mode=input.mode;
   if (['silver','gold','cyan','violet'].includes(input.palette)) result.palette=input.palette;

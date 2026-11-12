@@ -8,6 +8,9 @@
 - Ring interiors must resemble the supplied NEXUS video: irregular neural filaments, traveling luminous signals, subtle depth and localized bright computation sectors.
 - The circular core and particle field must be visibly connected, including pointer/drag/click reactions and continuous signal discharge from the ring into the field.
 - Complete each meaningful stage with a Git commit and push to the existing Unorva/PulseDeck repository. Stage explicit source/document paths; keep screenshots, local logs, build output and telemetry out of commits.
+- Latest correction: retain the original bottom six monitoring cards and right-side metric cards in the desktop wallpaper. Clean display means controls stay in Settings; it does not mean removing telemetry cards.
+- The three small black holes must attract, bend and capture particles. Use actual shared acceleration, not decorative circles or only preset paths.
+- The computation ring should be slightly wider, with fine radial streamlines perpendicular to the rim and continuous normal-direction discharge into the field.
 
 Run the local server yourself and open the preview in the browser available to this environment. Do not give the user server-start instructions when you can run it.
 

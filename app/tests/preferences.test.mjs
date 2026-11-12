@@ -1,8 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {defaultPreferences,sanitizePreferences,mergePreferences} from '../shared/preferences.mjs';
-test('desktop preferences use safe clean-presentation defaults',()=>{
- const p=sanitizePreferences();assert.equal(p.wallpaperEnabled,false);assert.equal(p.startAtLogin,false);assert.equal(p.showMetrics,false);assert.equal(p.showLabels,false);assert.equal(p.interactive,true);
+test('desktop defaults retain requested telemetry cards with autostart disabled',()=>{
+ const p=sanitizePreferences();assert.equal(p.wallpaperEnabled,false);assert.equal(p.startAtLogin,false);assert.equal(p.showMetrics,true);assert.equal(p.showMonitors,true);assert.equal(p.interactive,true);
 });
 test('untrusted preference fields cannot become commands or unbounded renderer input',()=>{
  const p=sanitizePreferences({particles:Infinity,speed:99,glow:-1,mode:'javascript:evil',selectedDisplay:';calc',fps:999,executable:'powershell',startAtLogin:'true'});
