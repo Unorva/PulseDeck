@@ -47,16 +47,16 @@ export function createCollector() {
   const getGraphics = async () => {
     const response = await si.graphics();
     if (stopped) return;
-    graphics = selectGraphics(response.controllers || []);
+    const nextGraphics = selectGraphics(response.controllers || []);
     // Windows exposes usage via performance counters even when a vendor API does not.
-    if (graphics.gpu === null && process.platform === 'win32') {
+    if (nextGraphics.gpu === null && process.platform === 'win32') {
       try {
         const script = "$ErrorActionPreference='Stop'; $g=Get-CimInstance Win32_PerfFormattedData_GPUPerformanceCounters_GPUEngine; $v=$g | Group-Object { ($_.Name -split 'engtype_')[-1] } | ForEach-Object { ($_.Group | Measure-Object -Property UtilizationPercentage -Sum).Sum }; if($v.Count -gt 0){ ($v | Measure-Object -Maximum).Maximum }";
         const { stdout } = await execFileAsync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', script], { windowsHide: true, timeout: 4500, maxBuffer: 65536 });
-        const text = stdout.trim(); if (text && Number.isFinite(Number(text))) graphics.gpu = percentage(Number(text));
+        const text = stdout.trim(); if (text && Number.isFinite(Number(text))) nextGraphics.gpu = percentage(Number(text));
       } catch { /* Unsupported counters remain explicitly unavailable. */ }
     }
-    graphicsAt = Date.now();
+    if (!stopped) { graphics = nextGraphics; graphicsAt = Date.now(); }
   };
   const getProcesses = async () => {
     const result = await si.processes();

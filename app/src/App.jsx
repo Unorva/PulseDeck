@@ -62,13 +62,13 @@ export function App() {
   const [settings, setSettings] = useState(false), [detail, setDetail] = useState(null);
   const [immersive, setImmersive] = useState(false), [fullscreen, setFullscreen] = useState(false);
   const [fps, setFps] = useState(0), [toast, setToast] = useState(''), [exporting, setExporting] = useState(false);
-  const canvas = useRef(null), engine = useRef(null), root = useRef(null);
+  const canvas = useRef(null), particleCanvas = useRef(null), engine = useRef(null), root = useRef(null);
   const { data, history, state, age, events } = useTelemetry();
   const metric = data?.metrics || {}, hardware = data?.hardware || {};
   const palette = palettes[config.palette], mode = modes.find(m => m.id === config.mode);
   const connected = state === 'live';
   const update = (key, value) => setConfig(c => ({ ...c, [key]: value }));
-  useEffect(() => { engine.current = new Observatory(canvas.current, setFps); return () => engine.current.dispose(); }, []);
+  useEffect(() => { engine.current = new Observatory(canvas.current, setFps, particleCanvas.current); return () => engine.current.dispose(); }, []);
   useEffect(() => { engine.current?.setConfig(config); localStorage.setItem('pulsedeck.settings.v1', JSON.stringify({ ...config, paused: false })); }, [config]);
   useEffect(() => { engine.current?.setMetrics({ ...metric, sequence: data?.sequence }); }, [data]);
   useEffect(() => { if (!toast) return; const timer = setTimeout(() => setToast(''), 3500); return () => clearTimeout(timer); }, [toast]);
@@ -112,6 +112,7 @@ export function App() {
       </nav>
     </header>
     <section className="stage" aria-label="实时动态可视化">
+      <canvas ref={particleCanvas} className="particle-field" aria-hidden="true" />
       <canvas ref={canvas} className="universe" role="img" aria-label={`${mode.name}：由本机硬件数据驱动的神经网络与粒子流，可移动指针或点击扰动流场`} />
       <div className="mode-tabs" role="group" aria-label="可视化模式">{modes.map((m, i) => <button key={m.id} aria-pressed={config.mode === m.id} className={config.mode === m.id ? 'active' : ''} onClick={() => update('mode', m.id)} title={`${i + 1}：${m.name}`}><span className="mode-number">0{i + 1}</span>{m.name}</button>)}</div>
       <div className="metric-rail">{metricMeta.map((m, i) => <button className={`rail-item ${overload.some(o => o.key === m.key) ? 'overload' : ''}`} key={m.key} onClick={() => setDetail(m.key)} aria-label={`查看${m.label}详情`}><span className="rail-top">{m.label}<em>0{i + 1}</em></span><strong>{display(m.key)}</strong><span className="rail-bottom">{Number.isFinite(metric[m.key]) ? '实时采样 / 并行计算' : '等待可用数据'}</span></button>)}</div>
@@ -147,7 +148,7 @@ export function App() {
         <div className="card-foot"><span>1 Hz / {connected ? '本机只读采集' : '自动重连中'}</span><span>{data?.timestamp ? new Date(data.timestamp).toLocaleTimeString('en-GB') : '—'}</span></div>
       </article>
     </section>
-    <footer className="statusbar"><span><i className={connected ? 'status-dot live' : 'status-dot'} />{connected ? 'LIVE' : 'OFFLINE'} / READ ONLY <b>{hardware.cpu || 'LOCAL TELEMETRY'}</b></span><span>{config.particles.toLocaleString()} PARTICLES / {mode.en} / {fps} FPS / CANVAS 2D</span><span className="keyboard-hint">1–5 切换 · SPACE 暂停 · H 沉浸</span></footer>
+    <footer className="statusbar"><span><i className={connected ? 'status-dot live' : 'status-dot'} />{connected ? 'LIVE' : 'OFFLINE'} / READ ONLY <b>{hardware.cpu || 'LOCAL TELEMETRY'}</b></span><span>{config.particles.toLocaleString()} PARTICLES / {mode.en} / {fps} FPS / {engine.current?.field.gl ? 'WEBGL' : 'CANVAS 2D'}</span><span className="keyboard-hint">1–5 切换 · SPACE 暂停 · H 沉浸</span></footer>
     {settings && <Dialog title="调节流动" onClose={() => setSettings(false)} className="settings-dialog">
       <p className="settings-description">让计算变得可见。神经网络、计算圆环与粒子流随本机负载持续演化。</p>
       <div className="settings-section"><span className="eyebrow">VISUAL CONTROLS</span>
