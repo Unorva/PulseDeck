@@ -1,9 +1,16 @@
 @echo off
 setlocal
+if exist "%~dp0release\PulseDeck-Portable-0.4.0-x64.exe" (
+  start "" "%~dp0release\PulseDeck-Portable-0.4.0-x64.exe"
+  exit /b 0
+)
+if exist "%~dp0release\win-unpacked\PulseDeck.exe" (
+  start "" "%~dp0release\win-unpacked\PulseDeck.exe"
+  exit /b 0
+)
 cd /d "%~dp0app"
-powershell -NoProfile -NonInteractive -Command "try { $r = Invoke-RestMethod -Uri 'http://127.0.0.1:4180/api/telemetry' -TimeoutSec 2; if ($r.application -eq 'PulseDeck') { exit 0 } } catch {}; exit 1"
-if not errorlevel 1 (
-  start "" "http://127.0.0.1:4180/"
+if exist "node_modules\electron\dist\electron.exe" (
+  start "" "node_modules\electron\dist\electron.exe" .
   exit /b 0
 )
 where node >nul 2>nul
@@ -19,12 +26,10 @@ if not exist node_modules (
     exit /b 1
   )
 )
-call npm run build
+call npm run desktop:prepare
 if errorlevel 1 (
   pause
   exit /b 1
 )
-set PORT=4180
-start "" "http://127.0.0.1:4180/"
-call npm start
+call npm run desktop
 pause

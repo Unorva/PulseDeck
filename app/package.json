@@ -1,6 +1,6 @@
 {
   "name": "pulsedeck",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "PulseDeck Windows desktop wallpaper and live hardware observatory",
   "author": "Unorva",
   "main": "electron/main.mjs",
@@ -41,7 +41,7 @@
         "nsis",
         "portable"
       ],
-      "signAndEditExecutable": false
+      "signExecutable": false
     },
     "nsis": {
       "oneClick": false,

@@ -5,8 +5,13 @@ export function bezier(a, b, c, d, t) {
   return [s ** 3 * a[0] + 3 * s * s * t * b[0] + 3 * s * t * t * c[0] + t ** 3 * d[0], s ** 3 * a[1] + 3 * s * s * t * b[1] + 3 * s * t * t * c[1] + t ** 3 * d[1]];
 }
 export function wellPosition(index, time, x, y, scale) {
-  const angle = time * .23 + index * TAU / 3;
-  return [x + Math.cos(angle) * scale * .29, y + Math.sin(angle * 1.3 + index) * scale * .22];
+  const angle = time * .15 + index * TAU / 3;
+  const radius=.39+Math.sin(time*.17+index)*.045;
+  return [x + Math.cos(angle) * scale * radius, y + Math.sin(angle) * scale * radius*.78 +Math.sin(time*.27+index)*scale*.035];
+}
+export function emissionPort(p,time,core){
+  const angle=(p.v-.5)*1.18+Math.sin(time*.16+p.band*.65)*.105+Math.sin(p.a+time*.31)*.035;
+  return {x:core.x+Math.cos(angle)*core.radius*1.025,y:core.y+Math.sin(angle)*core.radius*1.025,angle};
 }
 export function portPosition(band, time, core) {
   const angle = (band - 2) * .22 + Math.sin(time * .13 + band) * .055;

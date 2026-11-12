@@ -63,4 +63,17 @@ Date: 2026-11-12. Scope: a working, independently implemented recreation of the 
 - [x] Production build, appropriate automated checks and startup verified.
 - [x] Reproducible startup instructions and Windows launcher supplied.
 
-final result: passed
+## 0.4.0 三体引力与 Windows 安装包阶段（2026-11-12）
+
+本轮变更是把三颗小黑洞从"预设轨道 + 粒子独立积分"升级为真实三体运动，并交付 0.4.0 Windows 软件包。
+
+- 物理：三颗黑洞由成对软化牛顿引力驱动，位置与速度随加速度演化（figure-8 初值，G=0.018、坐标缩放 0.42 保持轨道形状）；拖动其中一颗时仅固定该颗，另外两颗继续按引力响应。粒子改为沿三处引力场积分出的 72 条连续流线运动，流线从圆环法线出口出发，弯曲、绕行并终止于捕获点或流场边界。
+- 光效：圆环加宽；亮区改为 3 组细密梳状径向光栅；WebGL 粒子改为带柔边的实例化线段，线宽可调（新增"粒子线宽"设置项，1–2.8px）。
+- 数据/布局未回退：壁纸展示仍保留右侧五项读数与底部六张监测卡片。
+- 数值验证：`npm test` 28 项全部通过，其中新增覆盖"移动一颗黑洞会改变另外两颗的加速度与轨迹""拖动只固定被选黑洞、另外两颗继续响应""默认场景连续 5 分钟保持有限且可见"。
+- 渲染抽检：无头 Edge + 真实 D3D11 WebGL，1440×960 DPR1，默认三体场景。未出现黑屏；三颗黑洞清晰可见并带亮环与拖尾；粒子流线连续弯曲、绕行与捕获可见；右侧五项读数与底部六卡完整、无遮挡、无文字溢出；状态栏显示 `12,000 PARTICLES / THREE BODY / CHAOS / WEBGL` 与实时帧率。证据：`artifacts/qa-0.4.0/smoke.png`（本机截图，不纳入版本控制）。首屏前约 6 秒网络读数为 N/A 属遥测预热，之后恢复正常速率。
+- 打包验证：`npm run package:win` 生成 `release/PulseDeck-Setup-0.4.0-x64.exe`（122,013,735 B）与 `release/PulseDeck-Portable-0.4.0-x64.exe`（110,963,488 B），blockmap 与 Setup 的块数/总字节一致；内置 `app.asar` 的 version=0.4.0，且与 `dist/client` 新构建逐文件哈希一致，Setup payload 内的 `app.asar` 与 `win-unpacked` 完全相同。`release/win-unpacked/PulseDeck.exe` 启动冒烟通过：原生窗口 `PulseDeck · 设置` 与 `PulseDeck Wallpaper` 正常创建，设置页三体实时预览正常渲染（证据 `artifacts/qa-0.4.0/packaged-0.4.0.png`、`smoke-0.4.0.json`）。
+- 安装器交互验证：本轮自动审查不允许在当前会话执行安装器静默安装，因此以 payload 列举、字节/哈希一致与 blockmap 自洽替代；安装向导的点击级验证由用户在交互桌面双击 `PulseDeck-Setup-0.4.0-x64.exe` 完成。
+- 限制：本轮只对默认三体场景做抽检；五种模式逐项对比、窄屏布局与真实壁纸层画面未在 0.4.0 重跑；最终画面由用户验收，如有问题在后续提交修正。
+
+final result: passed (0.4.0 视觉与打包抽检通过，最终画面待用户验收)

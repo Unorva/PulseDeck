@@ -1,6 +1,6 @@
 import { ParticleLayer } from './particles-gl.js';
-import { transportPosition, portPosition, wellPosition, waveEnergy } from './core-field.js';
-import {stepGravityParticle} from './gravity-field.js';
+import { transportPosition, portPosition, wellPosition, waveEnergy,emissionPort } from './core-field.js';
+import {traceGravityStream,sampleGravityStream,createThreeBodies,stepThreeBodies} from './gravity-field.js';
 const TAU = Math.PI * 2;
 const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
 export const palettes = {
@@ -31,7 +31,7 @@ export class Observatory {
     this.pointer = { x: -1000, y: -1000 }; this.impulse = 0;
     this.waves = []; this.pulseCount = 0; this.drag = null;
     this.orbit = { yaw: 0, pitch: 0, targetYaw: 0, targetPitch: 0 };
-    this.captureTimes=[-10,-10,-10];this.captureCounts=[0,0,0];this.wellOffsets=[null,null,null];this.dragWell=null;
+    this.captureTimes=[-10,-10,-10];this.captureCounts=[0,0,0];this.wellOffsets=[null,null,null];this.dragWell=null;this.bodies=createThreeBodies();this.bodyTrails=[[],[],[]];
     const random = randomFactory(27);
     this.particles = Array.from({ length: 24000 }, () => ({ u: random(), v: random(), w: random(), a: random() * TAU, band: Math.floor(random() * 5), x: null, y: null }));
     this.nodes = Array.from({ length: 290 }, (_, i) => {
@@ -66,13 +66,14 @@ export class Observatory {
     };
     this.leave = () => { this.pointer.x = -1000; };
     this.down = e => { if (this.config.interactive === false) return; const b=canvas.getBoundingClientRect();this.setPointer(e.clientX-b.x,e.clientY-b.y);this.beginInteraction();this.drag = { x: e.clientX, y: e.clientY }; canvas.setPointerCapture?.(e.pointerId); this.triggerImpulse(); };
-    this.up = () => { this.drag = null;this.dragWell=null; };
+    this.up = () => { this.drag = null;if(this.dragWell!==null)this.wellOffsets[this.dragWell]=null;this.dragWell=null; };
     this.click = () => {};
     canvas.addEventListener('pointermove', this.move); canvas.addEventListener('pointerleave', this.leave); canvas.addEventListener('click', this.click);
     canvas.addEventListener('pointerdown', this.down); canvas.addEventListener('pointerup', this.up); canvas.addEventListener('pointercancel', this.up);
     this.loop = now => {
       const elapsed = this.last ? (now - this.last) / 1000 : .016;
       this.last = now;
+      if(this.config.paused&&this.lastDraw&&now-this.lastDraw<500){this.raf=requestAnimationFrame(this.loop);return;}
       if (this.config.fps && this.lastDraw && now - this.lastDraw < 1000 / this.config.fps - 1) { this.raf = requestAnimationFrame(this.loop); return; }
       const drawElapsed = this.lastDraw ? (now-this.lastDraw)/1000 : elapsed;
       const dt = Math.min(drawElapsed,.10);
@@ -90,7 +91,7 @@ export class Observatory {
     };
     this.raf = requestAnimationFrame(this.loop);
   }
-  setConfig(config) { if(this.config.mode!==config.mode){this.particles.forEach(p=>{p.gravity=null;p.x=null;});this.lastGravityTime=null;this.wellOffsets=[null,null,null];}this.config = config; }
+  setConfig(config) { if(this.config.mode!==config.mode){this.particles.forEach(p=>{p.gravity=null;p.x=null;});this.lastGravityTime=null;this.wellOffsets=[null,null,null];}if(this.config.gravityStrength!==config.gravityStrength)this.gravityTraceTime=null;this.config = config; }
   setMetrics(metrics) {
     if (metrics?.sequence && metrics.sequence !== this.metrics.sequence && metrics.sequence % 3 === 0 && this.projected?.length) {
       const n = this.projected[(metrics.sequence * 17) % this.projected.length];
@@ -106,7 +107,7 @@ export class Observatory {
     if(x<0||x>this.w||y<0||y>this.h){this.setPointer(-1000,-1000);return;}
     this.setPointer(x,y);if(point.pressed){this.beginInteraction();this.triggerImpulse(x,y);}
     if(point.down){if(this.dragWell!==null&&this.gravityLayout){const f=this.gravityLayout;this.wellOffsets[this.dragWell]={x:(x-f.x)/f.scale,y:(y-f.y)/f.scale};}else if(point.dx){this.orbit.targetYaw+=point.dx*.006;this.orbit.targetPitch=clamp(this.orbit.targetPitch+point.dy*.004,-.7,.7);}}
-    else this.dragWell=null;
+    else {if(this.dragWell!==null)this.wellOffsets[this.dragWell]=null;this.dragWell=null;}
   }
   triggerImpulse(x = this.pointer.x, y = this.pointer.y) {
     if (!(x >= 0)) { x = this.cx; y = this.cy; }
@@ -218,13 +219,13 @@ export class Observatory {
     }
     // Radial light combs cross the thickness of the ring. Their direction is
     // normal to the circular rim and matches the particles' injection velocity.
-    for(let band=0;band<5;band++){
-      const port=portPosition(band,t,{x:cx,y:cy,radius:r}),base=Math.atan2(port[1]-cy,port[0]-cx);
-      c.strokeStyle=this.color(.25+this.impulse*.35,band<2);c.lineWidth=.5;c.beginPath();
-      for(let n=0;n<48;n++){
-        const angle=base+(n/47-.5)*.104;
-        const moving=(n*.618+t*(.25+band*.02))%1;
-        const start=r*(.86+moving*.105),end=start+r*(.04+((n*17)%23)/23*.05);
+    for(let band=0;band<3;band++){
+      const base=(band-1)*.44+Math.sin(t*.16+band*.8)*.16;
+      c.strokeStyle=this.color(.30+this.impulse*.30,band===0);c.lineWidth=.7;c.beginPath();
+      for(let n=0;n<95;n++){
+        const angle=base+(n/94-.5)*.32;
+        const moving=(n*.618+t*(.28+band*.02))%1;
+        const start=r*(.86+moving*.105),end=start+r*(.035+((n*17)%23)/23*.065);
         c.moveTo(cx+Math.cos(angle)*start,cy+Math.sin(angle)*start);
         c.lineTo(cx+Math.cos(angle)*end,cy+Math.sin(angle)*end);
       }
@@ -262,7 +263,11 @@ export class Observatory {
     this.line(cx - 21, cy + 48, cx + 21, cy + 48, .35);
   }
   getPosition(p, t, fcx, cy, fw, scale) {
-    if(this.config.mode==='threebody'&&this.gravityWells&&p.w>.10)return this.gravityPosition(p,t,fcx,cy,fw,scale);
+    if(this.config.mode==='threebody'&&this.gravityWells){
+      if(p.w>.08)return this.gravityPosition(p,t,fcx,cy,fw,scale);
+      const phase=(p.u+t*.09)%1;
+      return transportPosition(p,phase*.16,t,{x:this.cx,y:this.cy,radius:this.radius},{x:fcx,y:cy,width:fw,scale},'threebody');
+    }
     const phase=(p.u+t*(.035+p.w*.012))%1;
     if (p.lastPhase !== undefined && phase < p.lastPhase && !this.config.paused) p.x=null;
     p.lastPhase=phase;
@@ -270,26 +275,14 @@ export class Observatory {
     return this.ambientPosition(p,t,fcx,cy,fw,scale);
   }
   gravityPosition(p,t,fcx,cy,fw,scale){
-    const spawn=initial=>{
-      const port=portPosition(p.band,t,{x:this.cx,y:this.cy,radius:this.radius});
-      const angle=Math.atan2(port[1]-this.cy,port[0]-this.cx)+(p.v-.5)*.04+Math.sin(p.a)*.012,speed=.75+(p.a/TAU)*.75;
-      let x=(port[0]-fcx)/scale,y=(port[1]-cy)/scale+(p.v-.5)*.10;
-      let vx=Math.cos(angle)*speed,vy=Math.sin(angle)*speed;
-      if(initial){
-        const position=transportPosition(p,.16+p.u*.84,t,{x:this.cx,y:this.cy,radius:this.radius},{x:fcx,y:cy,width:fw,scale},'threebody');
-        x=(position[0]-fcx)/scale;y=(position[1]-cy)/scale;
-        if(p.w>.88){const well=this.gravityWells[p.band%3],radius=.07+p.v*.13,a=p.a;x=well.x+Math.cos(a)*radius;y=well.y+Math.sin(a)*radius;const orbital=Math.sqrt(.24/radius)*.80;vx=-Math.sin(a)*orbital;vy=Math.cos(a)*orbital;}
-      }
-      p.gravity={x,y,vx,vy,age:0};p.x=null;
-    };
-    if(!p.gravity)spawn(true);
-    const g=p.gravity;
-    if(!this.config.paused){
-      const captured=stepGravityParticle(g,this.gravityWells,this.gravityDt,(this.config.gravityStrength||1)*(1+this.impulse*.55));g.age+=this.gravityDt;
-      if(captured>=0){this.captureTimes[captured]=t;this.captureCounts[captured]++;spawn(false);}
-      else if(g.age>12||g.x>fw/scale*.78||Math.abs(g.y)>2.0||g.x<-(fcx-this.cx)/scale)spawn(false);
-    }
-    return [fcx+p.gravity.x*scale,cy+p.gravity.y*scale];
+    const streams=this.gravityStreams;if(!streams?.length)return [fcx,cy];
+    const stream=streams[Math.min(streams.length-1,Math.floor(p.v*streams.length))];
+    const phase=(p.u+t*(.10+p.w*.025))%1;
+    if(p.gravityPhase!==undefined&&phase<p.gravityPhase){p.x=null;if(stream.captured>=0){this.captureCounts[stream.captured]++;this.captureTimes[stream.captured]=t;}}
+    p.gravityPhase=phase;
+    const position=sampleGravityStream(stream,phase);
+    const perpendicular=(p.w-.5)*.010;
+    return [fcx+position.x*scale,cy+(position.y+perpendicular)*scale];
   }
   ambientPosition(p, t, fcx, cy, fw, scale) {
     const mode = this.config.mode, a = p.a, u = (p.u + t * (.025 + p.w * .012)) % 1;
@@ -333,8 +326,20 @@ export class Observatory {
     const count = this.config.particles;
     const glow = this.config.glow;
     this.gravityLayout={x:fcx,y:cy,scale};
-    this.gravityWells=Array.from({length:3},(_,i)=>{const position=wellPosition(i,t,fcx,cy,scale),offset=this.wellOffsets[i];return {x:offset?.x??(position[0]-fcx)/scale,y:offset?.y??(position[1]-cy)/scale,mass:1+i*.07};});
     this.gravityDt=this.lastGravityTime==null ? .016 : clamp(t-this.lastGravityTime,0,.10);this.lastGravityTime=t;
+    if(this.config.mode==='threebody'&&!this.config.paused){
+      stepThreeBodies(this.bodies,this.gravityDt,this.config.gravityStrength||1,this.dragWell??-1,this.dragWell!==null?this.wellOffsets[this.dragWell]:null);
+      if(this.frame%4===0)this.bodies.forEach((b,i)=>{this.bodyTrails[i].push({x:b.x,y:b.y});if(this.bodyTrails[i].length>95)this.bodyTrails[i].shift();});
+    }
+    this.gravityWells=this.bodies.map(b=>({x:b.x,y:b.y,mass:b.mass,radius:.058}));
+    if(this.config.mode==='threebody'&&(!this.gravityStreams||this.gravityTraceTime==null||Math.abs(t-this.gravityTraceTime)>.22||this.dragWell!==null)){
+      this.gravityTraceTime=t;
+      this.gravityStreams=Array.from({length:72},(_,i)=>{
+        const v=(i+.5)/72,port=emissionPort({v,band:i%5,a:i*2.39996},t,{x:this.cx,y:this.cy,radius:this.radius});
+        const speed=.95+.15*Math.sin(i*1.37),angle=port.angle*.84;
+        return traceGravityStream({x:(port.x-fcx)/scale,y:(port.y-cy)/scale},{vx:Math.cos(angle)*speed,vy:Math.sin(angle)*speed},this.gravityWells,this.config.gravityStrength||1);
+      });
+    }
     if (this.field.gl) {
       const vertices = this.field.vertices;
       const gpuEnergy = (this.metrics.gpu || 0) / 100;
@@ -352,9 +357,9 @@ export class Observatory {
         if (!this.config.paused) { p.vx = p.x - oldX; p.vy = p.y - oldY; }
         const vx = p.vx || 0, vy = p.vy || 0;
         const norm = Math.hypot(vx, vy) || 1;
-        const length = clamp(1.4 + p.w * 2.2 + norm * .7, 1.4, 10);
+        const length = clamp(2.5 + p.w * 3 + norm * 1.15, 2.5, 15);
         const rgb = p.band < 2 ? this.hot : this.rgb;
-        const alpha = (.16 + p.w * .52) * (.7 + glow * .35 + gpuEnergy * .22);
+        const alpha = (.10 + p.w * .30) * (.7 + glow * .25 + gpuEnergy * .12);
         const offset = i * 12;
         vertices[offset] = p.x; vertices[offset + 1] = p.y;
         vertices[offset + 6] = p.x - vx / norm * length - .35; vertices[offset + 7] = p.y - vy / norm * length;
@@ -363,7 +368,7 @@ export class Observatory {
         vertices[offset + 4] = vertices[offset + 10] = rgb[2] / 255;
         vertices[offset + 5] = vertices[offset + 11] = alpha;
       }
-      this.field.draw(count, w, h, this.cx, cy, this.radius, glow);
+      this.field.draw(count, w, h, this.cx, cy, this.radius, glow,this.config.particleWidth||1.6);
     } else {
     c.globalCompositeOperation = 'lighter';
     // Draw in opacity/color batches to keep 24k moving particles fluid.
@@ -407,16 +412,18 @@ export class Observatory {
     if (this.config.mode === 'threebody') for (let j = 0; j < 3; j++) {
       const well=this.gravityWells[j],x=fcx+well.x*scale,y=cy+well.y*scale;
       const captureGlow=Math.exp(-(t-this.captureTimes[j])*5);
+      const horizon=Math.max(9,scale*.058),disk=horizon*2.4;
+      const trail=this.bodyTrails[j];if(trail.length>2){c.strokeStyle=this.color(.055,j===1);c.lineWidth=.7;c.beginPath();trail.forEach((p,i)=>{const tx=fcx+p.x*scale,ty=cy+p.y*scale;if(i===0)c.moveTo(tx,ty);else c.lineTo(tx,ty);});c.stroke();}
       if (glow > 0) {
-        const gradient = c.createRadialGradient(x, y, 0, x, y, 30 * glow);
+        const gradient = c.createRadialGradient(x, y, 0, x, y, disk*1.3*glow);
         gradient.addColorStop(0, this.color(.20+captureGlow*.30, j === 1)); gradient.addColorStop(1, this.color(0));
-        c.fillStyle = gradient; c.fillRect(x - 60, y - 60, 120, 120);
+        c.fillStyle = gradient; c.fillRect(x - disk*3, y - disk*3, disk*6, disk*6);
       }
-      c.fillStyle = '#050809'; c.beginPath(); c.arc(x, y, 6, 0, TAU); c.fill();
-      this.arc(x, y, 7, 0, TAU, .86, 1.2, j === 1);
-      this.arc(x, y, 11 + j * 1.6, t + j, t + j + 5.5, .45, .5, j === 1);
-      this.arc(x, y, 17, t * .5, t * .5 + 3, .17, .5);
-      for(let ring=0;ring<3;ring++){c.save();c.translate(x,y);c.rotate(t*.23+j);c.scale(1,.42);this.arc(0,0,12+ring*3,t*(.5+ring*.2)+j,t*(.5+ring*.2)+j+4.6,.16+captureGlow*.12,.55,j===1);c.restore();}
+      c.fillStyle = '#020405'; c.beginPath(); c.arc(x, y, horizon, 0, TAU); c.fill();
+      this.arc(x, y, horizon+1, 0, TAU, .92, 1.45, j === 1);
+      this.arc(x, y, horizon*1.3, t+j, t+j+5.5, .40, .85, j === 1);
+      this.arc(x, y, horizon*1.8, t*.5, t*.5+3, .13, .65);
+      for(let ring=0;ring<3;ring++){c.save();c.translate(x,y);c.rotate(t*.20+j);c.scale(1,.45);this.arc(0,0,horizon*(1.9+ring*.3),t*(.5+ring*.2)+j,t*(.5+ring*.2)+j+4.6,.14+captureGlow*.10,.75,j===1);c.restore();}
     }
     if(this.config.mode==='threebody')this.canvas.dataset.captures=this.captureCounts.join(',');
     if (this.config.mode === 'neural') for (let layer = 0; layer < 6; layer++) {

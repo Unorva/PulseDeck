@@ -17,3 +17,7 @@ test('display selection, frame caps, particle limits and boolean choices round t
  assert.equal(p.selectedDisplay,'2948528');assert.equal(p.fps,30);assert.equal(p.particles,22000);assert.equal(p.wallpaperEnabled,true);assert.equal(p.interactive,false);assert.deepEqual(sanitizePreferences(JSON.parse(JSON.stringify(p))),p);
 });
 test('malformed preference patches are rejected',()=>{assert.throws(()=>mergePreferences(defaultPreferences,[]),TypeError);assert.throws(()=>mergePreferences(defaultPreferences,null),TypeError);});
+test('old wallpaper profiles gain the requested card layout; current explicit choices are preserved',()=>{
+ const migrated=sanitizePreferences({showMetrics:false,showMonitors:false});assert.equal(migrated.showMetrics,true);assert.equal(migrated.showMonitors,true);
+ const current=sanitizePreferences({layoutVersion:3,showMetrics:false,showMonitors:false});assert.equal(current.showMetrics,false);assert.equal(current.showMonitors,false);
+});
