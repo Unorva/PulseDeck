@@ -1,4 +1,5 @@
 import { ParticleLayer } from './particles-gl.js';
+import { transportPosition, portPosition, wellPosition, waveEnergy } from './core-field.js';
 const TAU = Math.PI * 2;
 const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
 export const palettes = {
@@ -27,16 +28,20 @@ export class Observatory {
     this.metrics = {};
     this.t = 10; this.last = 0; this.frame = 0; this.fpsTime = 0; this.fpsFrames = 0;
     this.pointer = { x: -1000, y: -1000 }; this.impulse = 0;
+    this.waves = []; this.pulseCount = 0; this.drag = null;
+    this.orbit = { yaw: 0, pitch: 0, targetYaw: 0, targetPitch: 0 };
     const random = randomFactory(27);
     this.particles = Array.from({ length: 24000 }, () => ({ u: random(), v: random(), w: random(), a: random() * TAU, band: Math.floor(random() * 5), x: null, y: null }));
-    this.nodes = Array.from({ length: 210 }, (_, i) => {
+    this.nodes = Array.from({ length: 290 }, (_, i) => {
       const y = random() * 2 - 1, r = Math.sqrt(1 - y * y), a = random() * TAU;
-      return { x: Math.cos(a) * r, y, z: Math.sin(a) * r, phase: random() * TAU };
+      const depth = .55 + Math.sqrt(random()) * .45;
+      return { x: Math.cos(a) * r * depth, y: y * depth, z: Math.sin(a) * r * depth, phase: random() * TAU };
     });
     this.edges = [];
     for (let i = 0; i < this.nodes.length; i++) for (let j = i + 1; j < this.nodes.length; j++) {
       const a = this.nodes[i], b = this.nodes[j];
-      if (Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z) < .39) this.edges.push([i, j]);
+      const distance = Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z);
+      if (distance < .30 || (i % 29 === 0 && j === i + 43)) this.edges.push([i, j]);
     }
     this.resize = () => {
       const box = canvas.getBoundingClientRect();
@@ -48,18 +53,34 @@ export class Observatory {
       this.particles.forEach(p => { p.x = null; });
     };
     this.observer = new ResizeObserver(this.resize); this.observer.observe(canvas);
-    this.move = e => { const b = canvas.getBoundingClientRect(); this.pointer = { x: e.clientX - b.x, y: e.clientY - b.y }; };
+    this.move = e => {
+      const b = canvas.getBoundingClientRect(); this.setPointer(e.clientX - b.x, e.clientY - b.y);
+      if (this.drag) {
+        this.orbit.targetYaw += (e.clientX - this.drag.x) * .006;
+        this.orbit.targetPitch = clamp(this.orbit.targetPitch + (e.clientY - this.drag.y) * .004, -.7, .7);
+        this.drag = { x: e.clientX, y: e.clientY };
+      }
+    };
     this.leave = () => { this.pointer.x = -1000; };
-    this.click = () => { this.impulse = 1; };
+    this.down = e => { this.drag = { x: e.clientX, y: e.clientY }; canvas.setPointerCapture?.(e.pointerId); this.triggerImpulse(); };
+    this.up = () => { this.drag = null; };
+    this.click = () => {};
     canvas.addEventListener('pointermove', this.move); canvas.addEventListener('pointerleave', this.leave); canvas.addEventListener('click', this.click);
+    canvas.addEventListener('pointerdown', this.down); canvas.addEventListener('pointerup', this.up); canvas.addEventListener('pointercancel', this.up);
     this.loop = now => {
       const elapsed = this.last ? (now - this.last) / 1000 : .016;
-      const dt = Math.min(elapsed, .05);
       this.last = now;
+      if (this.config.fps && this.lastDraw && now - this.lastDraw < 1000 / this.config.fps - 1) { this.raf = requestAnimationFrame(this.loop); return; }
+      const drawElapsed = this.lastDraw ? (now-this.lastDraw)/1000 : elapsed;
+      const dt = Math.min(drawElapsed,.10);
+      this.lastDraw = now;
       if (!document.hidden) {
         if (!this.config.paused) { this.t += dt * this.config.speed * (.7 + (this.metrics.cpu || 0) / 180); this.impulse *= Math.exp(-dt * 1.4); }
+        this.orbit.yaw += (this.orbit.targetYaw - this.orbit.yaw) * .10;
+        this.orbit.pitch += (this.orbit.targetPitch - this.orbit.pitch) * .10;
+        this.waves = this.waves.filter(wave => this.t - wave.time < 3.5);
         this.draw(dt);
-        this.fpsFrames++; this.fpsTime += elapsed;
+        this.fpsFrames++; this.fpsTime += drawElapsed;
         if (this.fpsTime > 1) { this.onFrame?.(Math.round(this.fpsFrames / this.fpsTime)); this.fpsTime = 0; this.fpsFrames = 0; }
       }
       this.raf = requestAnimationFrame(this.loop);
@@ -67,8 +88,20 @@ export class Observatory {
     this.raf = requestAnimationFrame(this.loop);
   }
   setConfig(config) { this.config = config; }
-  setMetrics(metrics) { this.metrics = metrics || {}; }
-  dispose() { cancelAnimationFrame(this.raf); this.observer.disconnect(); this.field.dispose(); this.canvas.removeEventListener('pointermove', this.move); this.canvas.removeEventListener('pointerleave', this.leave); this.canvas.removeEventListener('click', this.click); }
+  setMetrics(metrics) {
+    if (metrics?.sequence && metrics.sequence !== this.metrics.sequence && metrics.sequence % 3 === 0 && this.projected?.length) {
+      const n = this.projected[(metrics.sequence * 17) % this.projected.length];
+      this.waves.push({ x: n.x, y: n.y, time: this.t, automatic: true });
+    }
+    this.metrics = metrics || {};
+  }
+  setPointer(x, y) { this.pointer = { x, y }; }
+  triggerImpulse(x = this.pointer.x, y = this.pointer.y) {
+    if (!(x >= 0)) { x = this.cx; y = this.cy; }
+    this.impulse = 1; this.waves.push({ x, y, time: this.t }); this.waves = this.waves.slice(-9);
+    this.canvas.dataset.pulses = String(++this.pulseCount);
+  }
+  dispose() { cancelAnimationFrame(this.raf); this.observer.disconnect(); this.field.dispose(); for (const [event, handler] of [['pointermove',this.move],['pointerleave',this.leave],['click',this.click],['pointerdown',this.down],['pointerup',this.up],['pointercancel',this.up]]) this.canvas.removeEventListener(event,handler); }
   color(alpha, hot = false) { return `rgba(${(hot ? this.hot : this.rgb).join(',')},${clamp(alpha, 0, 1)})`; }
   line(x1, y1, x2, y2, alpha = .2, width = .5, hot = false) {
     const c = this.ctx; c.strokeStyle = this.color(alpha, hot); c.lineWidth = width; c.beginPath(); c.moveTo(x1, y1); c.lineTo(x2, y2); c.stroke();
@@ -95,9 +128,9 @@ export class Observatory {
       const x = ((i * 7919) % 997) / 997 * w, y = ((i * 3571) % 991) / 991 * h;
       c.fillStyle = this.color(.04 + .035 * Math.sin(t * .2 + i)); c.fillRect(x, y, .8, .8);
     }
-    c.save(); c.beginPath(); c.rect(cx + r * .56, 36, w - cx - r * .56 - 20, h - 66); c.clip();
-    this.drawField(dt, compact); c.restore();
+    this.drawField(dt, compact);
     this.drawCore(cx, cy, r);
+    if (this.config.clean) return;
     this.text('N E U R A L   O B S E R V A T O R Y', 22, 25, 7, .42);
     this.text('环状运算中枢', 22, 44, 12, .78);
     this.text(modes.find(m => m.id === this.config.mode)?.caption || '', 22, h - 17, 8, .44);
@@ -107,14 +140,22 @@ export class Observatory {
   drawCore(cx, cy, r) {
     const { ctx: c, t } = this;
     // Rotating, depth-projected Fibonacci network; edges preserve their 3D topology.
-    const a = t * .045 * this.config.cadence, co = Math.cos(a), si = Math.sin(a);
+    const hover = this.pointer.x >= 0 ? clamp((this.pointer.x - cx) / r, -1, 1) * .10 : 0;
+    const a = t * .035 * this.config.cadence + this.orbit.yaw + hover, co = Math.cos(a), si = Math.sin(a);
+    const tilt = this.orbit.pitch + (this.pointer.x >= 0 ? clamp((this.pointer.y - cy) / r, -1, 1) * .08 : 0);
     const projected = this.nodes.map(n => {
       const x = n.x * co - n.z * si, z = n.x * si + n.z * co;
-      return { x: cx + x * r * .86, y: cy + (n.y * .98 + z * .12) * r * .86, z, phase: n.phase };
+      const y = n.y * Math.cos(tilt) - z * Math.sin(tilt);
+      const p = { x: cx + x * r * .86, y: cy + y * r * .86, z, phase: n.phase };
+      p.energy = waveEnergy(p, this.waves, t, r);
+      const proximity = this.pointer.x >= 0 ? Math.exp(-Math.hypot(p.x - this.pointer.x, p.y - this.pointer.y) / 28) : 0;
+      p.energy = Math.max(p.energy, proximity * .75);
+      return p;
     });
+    this.projected = projected;
     if (this.config.neural) {
       for (let depth = 0; depth < 4; depth++) {
-        c.strokeStyle = this.color(.02 + depth * .02); c.lineWidth = .45; c.beginPath();
+        c.strokeStyle = this.color(.018 + depth * .014); c.lineWidth = .42; c.beginPath();
         for (const [i, j] of this.edges) {
           const a = projected[i], b = projected[j], z = (a.z + b.z + 2) / 4;
           if (Math.min(3, Math.floor(z * 4)) !== depth) continue;
@@ -125,17 +166,21 @@ export class Observatory {
       for (const [i, j] of this.edges) {
         const a = projected[i], b = projected[j], z = (a.z + b.z + 2) / 4;
         const pulse = (t * .15 * this.config.cadence + i * .173) % 1;
-        if (i % 7 === 0) {
+        const excitation = Math.max(a.energy, b.energy);
+        if (excitation > .07) this.line(a.x,a.y,b.x,b.y,excitation * .42,.65);
+        if (i % 5 === 0 || excitation > .3) {
           const x = a.x + (b.x - a.x) * pulse, y = a.y + (b.y - a.y) * pulse;
-          c.fillStyle = this.color(.45 * z); c.fillRect(x, y, 1.3, 1.3);
+          const tail = Math.max(0, pulse - .075 - excitation * .06);
+          this.line(a.x + (b.x-a.x)*tail,a.y + (b.y-a.y)*tail,x,y,(.22+excitation*.6)*z,.8);
+          c.fillStyle = this.color((.55 + excitation * .4) * z); c.fillRect(x, y, 1.2, 1.2);
         }
       }
       for (const p of projected) {
         const pulse = Math.pow(Math.max(0, Math.sin(t * .8 + p.phase)), 14);
-        const opacity = .13 + (p.z + 1) * .15 + pulse * .5;
-        if (pulse > .3 && this.config.glow > .1) {
-          const glow = c.createRadialGradient(p.x, p.y, 0, p.x, p.y, 4 * this.config.glow);
-          glow.addColorStop(0, this.color(opacity * .32)); glow.addColorStop(1, this.color(0));
+        const opacity = .055 + (p.z + 1) * .105 + pulse * .45 + p.energy * .65;
+        if ((pulse > .4 || p.energy > .15) && this.config.glow > .1) {
+          const glow = c.createRadialGradient(p.x, p.y, 0, p.x, p.y, (4 + p.energy * 7) * this.config.glow);
+          glow.addColorStop(0, this.color(opacity * .5)); glow.addColorStop(1, this.color(0));
           c.fillStyle = glow; c.fillRect(p.x - 10, p.y - 10, 20, 20);
         }
         c.fillStyle = this.color(opacity); c.fillRect(p.x, p.y, pulse > .5 ? 1.7 : 1, pulse > .5 ? 1.7 : 1);
@@ -150,13 +195,25 @@ export class Observatory {
         for (let i = 0; i < 96; i++) {
           const ang = i / 96 * TAU + spin;
           const activity = ((i * 13 + j * 29) % 101) / 100;
-          const bright = activity < (this.metrics.cpu || 15) / 100 && Math.cos(ang + t * .15) > .5;
+          const sector = Math.atan2(Math.sin(ang),Math.cos(ang));
+          const bright = activity < (.25 + (this.metrics.cpu || 0) / 160) && Math.abs(sector - Math.sin(t*.13)*.08) < .48;
           if (bright !== brightPass) continue;
           c.moveTo(cx + Math.cos(ang) * rr, cy + Math.sin(ang) * rr); c.arc(cx, cy, rr, ang, ang + .035);
         }
         c.stroke();
       }
     }
+    c.save(); c.globalCompositeOperation = 'lighter';
+    for (let band=0;band<5;band++) {
+      const port=portPosition(band,t,{x:cx,y:cy,radius:r});
+      const energy=.22 + .24*Math.pow(Math.max(0,Math.sin(t*1.3+band)),4) + this.impulse*.7;
+      const light=c.createRadialGradient(port[0],port[1],0,port[0],port[1],r*.07);
+      light.addColorStop(0,this.color(energy*.32,band<2)); light.addColorStop(1,this.color(0));
+      c.fillStyle=light; c.fillRect(port[0]-r*.08,port[1]-r*.08,r*.16,r*.16);
+      const angle=Math.atan2(port[1]-cy,port[0]-cx);
+      for(let layer=0;layer<4;layer++) this.arc(cx,cy,r*(.94+layer*.014),angle-.035,angle+.035,energy/(1+layer*.3),1.2,band<2);
+    }
+    c.restore();
     for (let i = 0; i < 180; i++) {
       const a = i / 180 * TAU, major = i % 15 === 0;
       this.line(cx + Math.cos(a) * r * 1.027, cy + Math.sin(a) * r * 1.027, cx + Math.cos(a) * r * (major ? 1.064 : 1.04), cy + Math.sin(a) * r * (major ? 1.064 : 1.04), major ? .48 : .17, .5);
@@ -178,6 +235,13 @@ export class Observatory {
     this.line(cx - 21, cy + 48, cx + 21, cy + 48, .35);
   }
   getPosition(p, t, fcx, cy, fw, scale) {
+    const phase=(p.u+t*(.035+p.w*.012))%1;
+    if (p.lastPhase !== undefined && phase < p.lastPhase && !this.config.paused) p.x=null;
+    p.lastPhase=phase;
+    if (p.w < .72) return transportPosition(p,phase,t,{x:this.cx,y:this.cy,radius:this.radius},{x:fcx,y:cy,width:fw,scale},this.config.mode);
+    return this.ambientPosition(p,t,fcx,cy,fw,scale);
+  }
+  ambientPosition(p, t, fcx, cy, fw, scale) {
     const mode = this.config.mode, a = p.a, u = (p.u + t * (.025 + p.w * .012)) % 1;
     const thickness = (p.v - .5) * (20 + 18 * p.w), k = p.band;
     if (mode === 'blackhole') {
@@ -288,8 +352,7 @@ export class Observatory {
       this.arc(fcx, cy, 13 + Math.sin(t * 2) * 2, 0, TAU, .9, .8, true);
     }
     if (this.config.mode === 'threebody') for (let j = 0; j < 3; j++) {
-      const a = t * .23 + j * TAU / 3;
-      const x = fcx + Math.cos(a) * scale * .29, y = cy + Math.sin(a * 1.3 + j) * scale * .22;
+      const [x,y] = wellPosition(j,t,fcx,cy,scale);
       if (glow > 0) {
         const gradient = c.createRadialGradient(x, y, 0, x, y, 30 * glow);
         gradient.addColorStop(0, this.color(.27, j === 1)); gradient.addColorStop(1, this.color(0));
@@ -316,6 +379,7 @@ export class Observatory {
       }
       this.text('L' + String(layer + 1).padStart(2, '0'), x, cy + scale * 1.06, 7, .3, 'center');
     }
+    if (this.config.clean) return;
     this.text(modes.find(m => m.id === this.config.mode)?.en || '', fcx, cy + scale * 1.24, 7, .45, 'center');
     // Fine datum lines link the field to the actual metric rail.
     for (let i = 0; i < 5; i++) {

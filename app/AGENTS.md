@@ -1,5 +1,14 @@
 # Prototype Instructions
 
+## Accepted product direction (2026-11-12)
+
+- PulseDeck is a Windows desktop application, not only a browser dashboard.
+- The user confirmed an animated desktop wallpaper behind desktop icons, with a separate settings/control window and an optional regular display window.
+- Keep the wallpaper presentation clean: no parameter drawer, toolbar, buttons, or alerts over the animation. Configure it from the application or tray.
+- Ring interiors must resemble the supplied NEXUS video: irregular neural filaments, traveling luminous signals, subtle depth and localized bright computation sectors.
+- The circular core and particle field must be visibly connected, including pointer/drag/click reactions and continuous signal discharge from the ring into the field.
+- Complete each meaningful stage with a Git commit and push to the existing Unorva/PulseDeck repository. Stage explicit source/document paths; keep screenshots, local logs, build output and telemetry out of commits.
+
 Run the local server yourself and open the preview in the browser available to this environment. Do not give the user server-start instructions when you can run it.
 
 Before making substantial visual changes, use the Product Design plugin's `get-context` skill when the visual source is unclear or no longer matches the current goal. When the user gives durable prototype-specific design feedback, preferences, or decisions, record them in `AGENTS.md`.

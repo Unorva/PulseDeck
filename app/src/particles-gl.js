@@ -32,8 +32,9 @@ export class ParticleLayer {
       varying vec4 vColor;
       varying vec2 vPosition;
       void main(){
-        if(distance(vPosition,uCore.xy)<uCore.z || vPosition.x<uCore.x || vPosition.y<58.0 || vPosition.y>uHeight-35.0) discard;
+        if(vPosition.x<uCore.x-uCore.z || vPosition.y<8.0 || vPosition.y>uHeight-8.0) discard;
         float a=vColor.a;
+        if(distance(vPosition,uCore.xy)<uCore.z*0.92) a*=0.18;
         if(uPoints>0.5){
           float d=length(gl_PointCoord-vec2(0.5))*2.0;
           if(d>1.0) discard;

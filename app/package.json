@@ -8,7 +8,7 @@
     "build": "vite build && node scripts/prepare-sites-build.mjs",
     "preview": "node server/serve.mjs",
     "start": "node server/serve.mjs",
-    "test": "node --test tests/telemetry.test.mjs",
+    "test": "node --test tests/telemetry.test.mjs tests/core-field.test.mjs",
     "test:sites": "node --test tests/sites-worker.test.mjs"
   },
   "dependencies": {
@@ -19,5 +19,9 @@
     "react-dom": "19.2.0",
     "systeminformation": "^5.33.19",
     "vite": "6.4.2"
+  },
+  "devDependencies": {
+    "electron": "45.3.1",
+    "electron-builder": "26.18.0"
   }
 }
