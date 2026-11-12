@@ -62,6 +62,7 @@ export function App() {
   const [settings, setSettings] = useState(false), [detail, setDetail] = useState(null);
   const [immersive, setImmersive] = useState(false), [fullscreen, setFullscreen] = useState(false);
   const [fps, setFps] = useState(0), [toast, setToast] = useState(''), [exporting, setExporting] = useState(false);
+  const [capture, setCapture] = useState(null);
   const canvas = useRef(null), particleCanvas = useRef(null), engine = useRef(null), root = useRef(null);
   const { data, history, state, age, events } = useTelemetry();
   const metric = data?.metrics || {}, hardware = data?.hardware || {};
@@ -74,12 +75,19 @@ export function App() {
   useEffect(() => { if (!toast) return; const timer = setTimeout(() => setToast(''), 3500); return () => clearTimeout(timer); }, [toast]);
   useEffect(() => { const sync = () => setFullscreen(Boolean(document.fullscreenElement)); document.addEventListener('fullscreenchange', sync); return () => document.removeEventListener('fullscreenchange', sync); }, []);
   const toggleFullscreen = async () => {
-    try { if (document.fullscreenElement) await document.exitFullscreen(); else await document.documentElement.requestFullscreen(); }
-    catch { setToast('当前窗口不支持全屏，可使用沉浸模式。'); }
+    try {
+      if (document.fullscreenElement) await document.exitFullscreen();
+      else {
+        if (!document.documentElement.requestFullscreen) throw new Error('Fullscreen unsupported');
+        await Promise.race([document.documentElement.requestFullscreen(), new Promise((_, reject) => setTimeout(() => reject(new Error('Fullscreen unavailable')), 1500))]);
+        if (!document.fullscreenElement) throw new Error('Fullscreen unavailable');
+      }
+    } catch { setImmersive(true); setToast('已切换沉浸显示；当前窗口不支持原生全屏。'); }
   };
   useEffect(() => {
     const onKey = e => {
-      if (e.target.closest('input,select,textarea,button') || e.ctrlKey || e.metaKey || e.altKey || settings || detail) return;
+      if (e.target.closest('input,select,textarea') || e.ctrlKey || e.metaKey || e.altKey || settings || detail || capture) return;
+      if (e.code === 'Space' && e.target.closest('button')) return;
       if (e.code === 'Space') { e.preventDefault(); setConfig(c => ({ ...c, paused: !c.paused })); }
       if (/^[1-5]$/.test(e.key)) update('mode', modes[Number(e.key) - 1].id);
       if (e.key.toLowerCase() === 'h') setImmersive(s => !s);
@@ -87,12 +95,12 @@ export function App() {
       if (e.key === 'Escape') setImmersive(false);
     };
     window.addEventListener('keydown', onKey); return () => window.removeEventListener('keydown', onKey);
-  }, [settings, detail]);
+  }, [settings, detail, capture]);
   const snapshot = async () => {
     setExporting(true);
     try {
       const url = await toPng(root.current, { pixelRatio: 1.5, backgroundColor: '#050809', filter: node => !node.classList?.contains('no-export') });
-      const link = document.createElement('a'); link.download = `PulseDeck-${config.mode}-${Date.now()}.png`; link.href = url; link.click(); setToast('观测画面已导出');
+      setCapture({ url, name: `PulseDeck-${config.mode}-${Date.now()}.png` });
     } catch { setToast('画面导出失败，请重试。'); } finally { setExporting(false); }
   };
   const display = key => key === 'download' || key === 'upload' ? formatRate(metric[key]) : formatPercent(metric[key]);
@@ -115,7 +123,7 @@ export function App() {
       <canvas ref={particleCanvas} className="particle-field" aria-hidden="true" />
       <canvas ref={canvas} className="universe" role="img" aria-label={`${mode.name}：由本机硬件数据驱动的神经网络与粒子流，可移动指针或点击扰动流场`} />
       <div className="mode-tabs" role="group" aria-label="可视化模式">{modes.map((m, i) => <button key={m.id} aria-pressed={config.mode === m.id} className={config.mode === m.id ? 'active' : ''} onClick={() => update('mode', m.id)} title={`${i + 1}：${m.name}`}><span className="mode-number">0{i + 1}</span>{m.name}</button>)}</div>
-      <div className="metric-rail">{metricMeta.map((m, i) => <button className={`rail-item ${overload.some(o => o.key === m.key) ? 'overload' : ''}`} key={m.key} onClick={() => setDetail(m.key)} aria-label={`查看${m.label}详情`}><span className="rail-top">{m.label}<em>0{i + 1}</em></span><strong>{display(m.key)}</strong><span className="rail-bottom">{Number.isFinite(metric[m.key]) ? '实时采样 / 并行计算' : '等待可用数据'}</span></button>)}</div>
+      <div className="metric-rail">{metricMeta.map((m, i) => <button className={`rail-item ${overload.some(o => o.key === m.key) ? 'overload' : ''}`} key={m.key} onClick={() => setDetail(m.key)} aria-label={`查看${m.label}详情`}><span className="rail-top">{m.label}<em>0{i + 1}</em></span><strong><MetricValue text={display(m.key)} /></strong><span className="rail-bottom">{Number.isFinite(metric[m.key]) ? '实时采样 / 并行计算' : '等待可用数据'}</span></button>)}</div>
       <div className="stage-corner"><span className="crosshair" /><span>LIVE FIELD / {mode.en}</span></div>
       <button className="pulse-button" onClick={() => { engine.current.impulse = 1; engine.current.pointer = { x: engine.current.w * .715, y: engine.current.h * .51 }; setTimeout(() => { if (engine.current) engine.current.pointer.x = -1000; }, 1800); }}><Lightning size={11} />注入脉冲</button>
       {config.paused && <div className="paused-indicator">视觉运动已暂停 · 遥测持续采样</div>}
@@ -140,7 +148,7 @@ export function App() {
       {['download', 'upload'].map((key, index) => <article className="monitor-card network-card" key={key}>
         <CardHeading number={'0' + (index + 4)} sub={index ? '网络发送' : '网络接收'} title={index ? '上传' : '下载'} value={display(key)} onClick={() => setDetail(key)} />
         <div className="network-chart"><Sparkline values={history[key]} color={palette.css} label={`最近60次${index ? '上传' : '下载'}速率`} /><Sparkline values={history[key].slice(-30)} color={palette.css} bars label="速率分布" /></div>
-        <div className="card-foot"><span>{hardware.network || '等待网络接口'}</span><span>60 S / {Number.isFinite(metric[key]) ? '实时' : '不可用'}</span></div>
+        <div className="card-foot"><span>{hardware.network || '等待网络接口'}</span><span>60 样本 / {Number.isFinite(metric[key]) ? '实时' : '不可用'}</span></div>
       </article>)}
       <article className="monitor-card sampling-card">
         <CardHeading number="06" sub="系统采样" title="采样记录" value={String(data?.sequence || 0).padStart(4, '0')} onClick={() => setDetail('sampling')} />
@@ -168,11 +176,16 @@ export function App() {
       {detail === 'gpu' && <p>{hardware.gpu}<br />{data?.capabilities?.gpu || '显卡驱动未提供利用率计数器，因此显示 N/A，不以估算值替代。'}</p>}
       {(detail === 'download' || detail === 'upload') && <p>{hardware.network} · 活跃物理网络接口的字节速率总和</p>}
       {detail === 'sampling' && <div className="detail-events">{events.map(e => <p key={e.id}><time>{e.time}</time>{e.message}</p>)}</div>}
-      <div className="detail-foot"><span>来源：本机操作系统 / systeminformation</span><span>采样 {data?.timestamp ? new Date(data.timestamp).toLocaleTimeString('en-GB') : '等待连接'}</span></div>
+      <div className="detail-foot"><span>本机只读 / {detail === 'gpu' ? '显卡每5秒更新' : detail === 'download' || detail === 'upload' ? '网络每2秒更新' : '每秒更新'}</span><span>采样 {data?.timestamp ? new Date(data.timestamp).toLocaleTimeString('en-GB') : '等待连接'}</span></div>
     </Dialog>}
+    {capture && <Dialog title="保存观测画面" onClose={() => setCapture(null)} className="capture-dialog"><img src={capture.url} className="capture-image" alt="PulseDeck 观测截图" /><a className="download-button" href={capture.url} download={capture.name}><ArrowDown size={14} />下载 PNG</a></Dialog>}
     {toast && <div role="status" className="toast no-export">{toast}</div>}
   </main>;
 }
 function CardHeading({ number, sub, title, value, onClick }) {
-  return <div className="card-heading"><div><span className="eyebrow">{number} / {sub}</span><h2>{title}</h2></div><strong>{value}</strong><button onClick={onClick} aria-label={`查看${title}详情`}>详情</button></div>;
+  return <div className="card-heading"><div><span className="eyebrow">{number} / {sub}</span><h2>{title}</h2></div><strong><MetricValue text={value} /></strong><button onClick={onClick} aria-label={`查看${title}详情`}>详情</button></div>;
+}
+function MetricValue({ text }) {
+  const match = String(text).match(/^([\d.]+)\s*(.*)$/);
+  return match ? <>{match[1]}{match[2] && <small>{match[2]}</small>}</> : text;
 }

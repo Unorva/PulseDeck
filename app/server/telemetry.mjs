@@ -69,7 +69,7 @@ export function createCollector() {
     const now = Date.now(), current = os.cpus(), total = os.totalmem(), available = os.freemem();
     const cpu = cpuDelta(previous, current); previous = current;
     last = {
-      timestamp: now, sequence: ++sequence,
+      application: 'PulseDeck', timestamp: now, sequence: ++sequence,
       metrics: { ...cpu, memory: percentage((total - available) / total * 100), memoryTotal: total, memoryUsed: total - available, memoryAvailable: available, gpu: now - graphicsAt < 15000 ? graphics.gpu : null, gpuMemory: now - graphicsAt < 15000 ? graphics.gpuMemory : null, gpuTemperature: now - graphicsAt < 15000 ? graphics.gpuTemperature : null, download: now - networkAt < 10000 ? network.download : null, upload: now - networkAt < 10000 ? network.upload : null },
       hardware: { cpu: current[0]?.model.trim() || os.arch(), gpu: graphics.name, network: network.network, platform: process.platform },
       processes: now - processesAt < 25000 ? processes : [],

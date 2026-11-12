@@ -30,13 +30,13 @@ export class Observatory {
     const random = randomFactory(27);
     this.particles = Array.from({ length: 24000 }, () => ({ u: random(), v: random(), w: random(), a: random() * TAU, band: Math.floor(random() * 5), x: null, y: null }));
     this.nodes = Array.from({ length: 210 }, (_, i) => {
-      const y = 1 - i / 209 * 2, r = Math.sqrt(1 - y * y), a = i * 2.399963 + (random() - .5) * .28;
+      const y = random() * 2 - 1, r = Math.sqrt(1 - y * y), a = random() * TAU;
       return { x: Math.cos(a) * r, y, z: Math.sin(a) * r, phase: random() * TAU };
     });
     this.edges = [];
     for (let i = 0; i < this.nodes.length; i++) for (let j = i + 1; j < this.nodes.length; j++) {
       const a = this.nodes[i], b = this.nodes[j];
-      if (Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z) < .44) this.edges.push([i, j]);
+      if (Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z) < .39) this.edges.push([i, j]);
     }
     this.resize = () => {
       const box = canvas.getBoundingClientRect();
@@ -114,7 +114,7 @@ export class Observatory {
     });
     if (this.config.neural) {
       for (let depth = 0; depth < 4; depth++) {
-        c.strokeStyle = this.color(.035 + depth * .026); c.lineWidth = .45; c.beginPath();
+        c.strokeStyle = this.color(.02 + depth * .02); c.lineWidth = .45; c.beginPath();
         for (const [i, j] of this.edges) {
           const a = projected[i], b = projected[j], z = (a.z + b.z + 2) / 4;
           if (Math.min(3, Math.floor(z * 4)) !== depth) continue;
@@ -194,11 +194,11 @@ export class Observatory {
       return [fcx + x * Math.cos(rot) - y * .25 * Math.sin(rot), cy + x * Math.sin(rot) + y * .25 * Math.cos(rot)];
     }
     if (mode === 'neural') {
-      const layer = Math.floor(u * 6), progress = (u * 6) % 1;
-      const nodeA = Math.floor(p.v * (k + 4)), nodeB = Math.floor(p.w * (k + 5));
-      const ya = (nodeA / (k + 3) - .5) * scale * 1.8;
-      const yb = (nodeB / (k + 4) - .5) * scale * 1.8;
-      return [fcx - fw * .47 + (layer + progress) / 6 * fw * .92, cy + ya * (1 - progress) + yb * progress + thickness * .08];
+      const layer = Math.floor(u * 5), progress = (u * 5) % 1;
+      const nodeA = Math.floor(p.v * 7), nodeB = Math.floor(p.w * 7);
+      const ya = (nodeA / 6 - .5) * scale * 1.8;
+      const yb = (nodeB / 6 - .5) * scale * 1.8;
+      return [fcx - fw * .47 + (layer + progress) / 5 * fw * .92, cy + ya * (1 - progress) + yb * progress + thickness * .025];
     }
     if (mode === 'flow') {
       const theta = u * TAU, rr = scale * (.64 + p.v * .30);
@@ -236,8 +236,8 @@ export class Observatory {
         const vx = p.vx || 0, vy = p.vy || 0;
         const norm = Math.hypot(vx, vy) || 1;
         const length = clamp(1.4 + p.w * 2.2 + norm * .7, 1.4, 10);
-        const rgb = i % 8 > 5 ? this.hot : this.rgb;
-        const alpha = (.14 + p.w * .4) * (.7 + glow * .35 + gpuEnergy * .22);
+        const rgb = p.band < 2 ? this.hot : this.rgb;
+        const alpha = (.16 + p.w * .52) * (.7 + glow * .35 + gpuEnergy * .22);
         const offset = i * 12;
         vertices[offset] = p.x; vertices[offset + 1] = p.y;
         vertices[offset + 6] = p.x - vx / norm * length - .35; vertices[offset + 7] = p.y - vy / norm * length;
@@ -301,7 +301,15 @@ export class Observatory {
       this.arc(x, y, 17, t * .5, t * .5 + 3, .17, .5);
     }
     if (this.config.mode === 'neural') for (let layer = 0; layer < 6; layer++) {
-      const x = fcx - fw * .47 + layer / 5 * fw * .77;
+      const x = fcx - fw * .47 + layer / 5 * fw * .92;
+      if (layer < 5) {
+        c.strokeStyle = this.color(.055); c.lineWidth = .4; c.beginPath();
+        for (let a = 0; a < 7; a++) for (let b = 0; b < 7; b++) {
+          c.moveTo(x, cy + (a / 6 - .5) * scale * 1.8);
+          c.lineTo(x + fw * .92 / 5, cy + (b / 6 - .5) * scale * 1.8);
+        }
+        c.stroke();
+      }
       for (let j = 0; j < 7; j++) {
         const y = cy + (j / 6 - .5) * scale * 1.8;
         this.arc(x, y, 3, 0, TAU, .52, .6); this.arc(x, y, 6, 0, TAU, .13, .5);
