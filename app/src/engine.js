@@ -1,5 +1,5 @@
 import { ParticleLayer } from './particles-gl.js';
-import { transportPosition, waveEnergy,emissionPort,emissionEnvelope } from './core-field.js';
+import { transportPosition, waveEnergy,emissionPort,emissionEnvelope,rimDataParticle } from './core-field.js';
 import {sampleGravityStream,createThreeBodies,stepThreeBodies} from './gravity-field.js';
 import { channelActivity, channelColor, metricChannels } from './metric-field.js';
 import {traceMetricTransport,routeToTarget} from './metric-transport.js';
@@ -99,7 +99,7 @@ export class Observatory {
             this.channelTimes[i] += dt * this.config.speed * channel.speed;
           });
           this.impulse *= Math.exp(-dt * 1.4);
-          const turn=1-Math.exp(-dt*1.8);
+          const turn=1-Math.exp(-dt*1.35);
           for(const [axis,target] of [['yaw','targetYaw'],['pitch','targetPitch'],['roll','targetRoll']])this.sampleOrbit[axis]+=(this.sampleOrbit[target]-this.sampleOrbit[axis])*turn;
         }
         this.orbit.yaw += (this.orbit.targetYaw - this.orbit.yaw) * .10;
@@ -119,11 +119,11 @@ export class Observatory {
     if(Number.isFinite(metrics?.sequence)&&metrics.sequence!==this.lastSampleSequence){
       this.lastSampleSequence=metrics.sequence;
       this.sampleCount++;
-      if(this.sampleCount%10===0&&!this.config.paused){
+      if(this.sampleCount%5===0&&!this.config.paused){
         const response=sampleResponse(metrics.sequence,metrics,this.nodes.length);
         this.sampleOrbit.targetYaw+=response.yaw;
-        this.sampleOrbit.targetPitch=clamp(this.sampleOrbit.targetPitch+response.pitch,-.55,.55);
-        this.sampleOrbit.targetRoll=clamp(this.sampleOrbit.targetRoll+response.roll,-.35,.35);
+        this.sampleOrbit.targetPitch=clamp(this.sampleOrbit.targetPitch+response.pitch,-.85,.85);
+        this.sampleOrbit.targetRoll=clamp(this.sampleOrbit.targetRoll+response.roll,-.60,.60);
         for(const index of response.indices)this.sampleBursts.push({...this.nodes[index],time:this.t,strength:response.strength});
         this.sampleBursts=this.sampleBursts.slice(-24);
       }
@@ -238,50 +238,38 @@ export class Observatory {
       }
     }
     const ringWidth=this.config.ringWidth||1.4;
-    for (let j = 0; j < 12; j++) {
-      const rr = r * (.87-(ringWidth-1)*.025 + j * .0125*ringWidth);
-      this.arc(cx, cy, rr, 0, TAU, j % 3 === 0 ? .16 : .055, .5);
-      const spin = t * (.012 + j * .003) * (j % 2 ? -1 : 1);
-      for (const brightPass of [false, true]) {
-        c.strokeStyle = this.color(brightPass ? .045 : .04); c.lineWidth = j % 3 === 0 ? .85 : .5; c.beginPath();
-        for (let i = 0; i < 96; i++) {
-          const ang = i / 96 * TAU + spin;
-          const activity = ((i * 13 + j * 29) % 101) / 100;
-          const sector = Math.atan2(Math.sin(ang),Math.cos(ang));
-          const bright = activity < (.25 + (this.metrics.cpu || 0) / 160) && Math.abs(sector - Math.sin(t*.13)*.08) < .48;
-          if (bright !== brightPass) continue;
-          c.moveTo(cx + Math.cos(ang) * rr, cy + Math.sin(ang) * rr); c.arc(cx, cy, rr, ang, ang + .035);
-        }
-        c.stroke();
-      }
+    for (let j = 0; j < 4; j++) {
+      const rr = r * (.86-(ringWidth-1)*.025+j*.048*ringWidth);
+      this.arc(cx, cy, rr, 0, TAU, .045+j*.004, .45);
     }
     for (let i = 0; i < 180; i++) {
       const a = i / 180 * TAU, major = i % 15 === 0;
-      this.line(cx + Math.cos(a) * r * 1.075, cy + Math.sin(a) * r * 1.075, cx + Math.cos(a) * r * (major ? 1.112 : 1.088), cy + Math.sin(a) * r * (major ? 1.112 : 1.088), major ? .48 : .17, .5);
+      if(major)this.line(cx + Math.cos(a) * r * 1.075, cy + Math.sin(a) * r * 1.075, cx + Math.cos(a) * r * 1.092, cy + Math.sin(a) * r * 1.092, .14, .5);
     }
     this.drawRimComputation(cx,cy,r);
-    for (let j = 0; j < 4; j++) {
-      const start = t * .09 + j * TAU / 4;
-      this.arc(cx, cy, r * .895, start, start + .13 + (this.metrics.memory || 20) / 450, .33, .7);
-    }
     this.text('0 1 — 0 5', cx - r * .55, cy - r * .97, 7, .35);
     c.save(); c.translate(cx - r * 1.075, cy + 45); c.rotate(-Math.PI / 2); this.text('LOCAL / LIVE / READ ONLY', 0, 0, 6, .35); c.restore();
   }
   drawRimComputation(cx,cy,r){
-    const c=this.ctx,port=emissionPort({v:.20,a:0,band:0},this.t,{x:cx,y:cy,radius:r});
-    c.save();c.globalCompositeOperation='lighter';c.shadowColor=this.color(.35);c.shadowBlur=2.5;
-    const glints=[];
-    for(let layer=0;layer<10;layer++)for(let n=-14;n<=14;n++){
-      const phase=(this.channelTimes[0]*.65+n*.173+layer*.317)%1;
-      const energy=Math.exp(-((n/10)**2))*(.15+Math.sin(phase*Math.PI)**6)*(.25+this.channels[0].level*.65);
-      const angle=port.angle+n*.0075,rr=r*(.87+layer*.015*(this.config.ringWidth||1.4));
-      glints.push({x:cx+Math.cos(angle)*rr,y:cy+Math.sin(angle)*rr,size:energy>.45?1.6:.8,bucket:Math.min(7,Math.floor(energy*8))});
-    }
-    // Batch glints so the browser blurs eight paths rather than 290 rectangles.
-    for(let bucket=0;bucket<8;bucket++){
-      c.fillStyle=this.color((bucket+.5)/8);c.beginPath();
-      for(const point of glints)if(point.bucket===bucket)c.rect(point.x,point.y,point.size,point.size);
-      c.fill();
+    const c=this.ctx,core={x:cx,y:cy,radius:r};
+    c.save();c.globalCompositeOperation='lighter';c.lineCap='round';
+    for(let band=0;band<5;band++){
+      const rgb=this.channelColors[band],channel=this.channels[band],packets=[];
+      for(let i=band;i<480;i+=5){
+        const p=rimDataParticle(i,this.channelTimes[band],this.t,core,this.config.ringWidth||1.4);
+        if(p.opacity<.018)continue;
+        p.bucket=Math.min(5,Math.floor(p.opacity*6));packets.push(p);
+      }
+      c.shadowColor=`rgb(${rgb.join(',')})`;c.shadowBlur=3+this.config.glow*2;
+      for(let bucket=0;bucket<6;bucket++){
+        const alpha=(bucket+.5)/6*(.42+channel.level*.30)*(.55+this.config.glow*.45);
+        c.strokeStyle=`rgba(${rgb.join(',')},${alpha*.7})`;c.lineWidth=.85;c.beginPath();
+        for(const p of packets)if(p.bucket===bucket){c.moveTo(p.tailX,p.tailY);c.lineTo(p.x,p.y);}
+        c.stroke();
+        c.fillStyle=`rgba(${rgb.join(',')},${alpha})`;c.beginPath();
+        for(const p of packets)if(p.bucket===bucket){c.moveTo(p.x+p.size*.6,p.y);c.arc(p.x,p.y,p.size*.6,0,TAU);}
+        c.fill();
+      }
     }
     c.restore();
   }
@@ -355,7 +343,7 @@ export class Observatory {
         if (!this.config.paused) { p.vx = p.x - oldX; p.vy = p.y - oldY; }
         const vx = p.vx || 0, vy = p.vy || 0;
         const norm = Math.hypot(vx, vy) || 1;
-        const length = clamp(.65+p.w*.85+norm*.08,.65,2.1);
+        const length = clamp(1.5+p.w*2.2+norm*.38,1.5,6.5);
         const rgb = this.channelColors[p.band];
         const selected = this.highlightedMetric === metricChannels[p.band].key;
         const alpha = (.65 + p.w * .25) * emissionEnvelope(p.v) * (selected ? 1.4 : this.highlightedMetric ? .32 : 1);
@@ -390,7 +378,7 @@ export class Observatory {
         if (!this.config.paused) { const blend = 1 - Math.exp(-dt * 12); p.x += (x - p.x) * blend; p.y += (y - p.y) * blend; }
         if (!this.config.paused) { p.vx = p.x - oldX; p.vy = p.y - oldY; }
         const vx = p.vx || 0, vy = p.vy || 0;
-        const length = clamp(.55+p.w*.55+Math.hypot(vx,vy)*.05,.55,1.6);
+        const length = clamp(1.5+p.w*2.2+Math.hypot(vx,vy)*.38,1.5,6.5);
         const norm = Math.hypot(vx, vy) || 1;
         c.moveTo(p.x, p.y); c.lineTo(p.x - vx / norm * length - .4, p.y - vy / norm * length);
         c.moveTo(p.x+1.1,p.y);c.arc(p.x,p.y,.85+p.w*.45,0,TAU);

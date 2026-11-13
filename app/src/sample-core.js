@@ -3,7 +3,7 @@ export function sampleResponse(sequence,metrics={},nodeCount=290){
   let seed=(sequence*2654435761+0x85ebca6b)>>>0;
   const random=()=>{seed^=seed<<13;seed^=seed>>>17;seed^=seed<<5;return (seed>>>0)/4294967296;};
   const load=Math.max(...['cpu','memory','gpu'].map(k=>Number.isFinite(metrics[k])?clamp(metrics[k]/100,0,1):0));
-  return {yaw:(random()-.5)*.75,pitch:(random()-.5)*.38,roll:(random()-.5)*.24,
+  return {yaw:(random()-.5)*1.5,pitch:(random()-.5)*.8,roll:(random()-.5)*.5,
     strength:.48+load*.45,indices:Array.from({length:3+Math.floor(load*3)},()=>Math.floor(random()*nodeCount))};
 }
 export function sampleNodeEnergy(node,bursts,time){

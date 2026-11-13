@@ -67,15 +67,15 @@ export class ParticleLayer {
       const vertex=compile(gl.VERTEX_SHADER,`
         attribute vec2 aCorner;attribute vec2 aStart;attribute vec2 aEnd;attribute vec4 aTint;
         uniform vec2 uResolution;uniform float uWidth;
-        varying vec4 vTint;varying vec2 vPosition;varying float vEdge;
+        varying vec4 vTint;varying vec2 vPosition;varying float vEdge;varying float vAlong;
         void main(){vec2 delta=aEnd-aStart;float len=max(length(delta),0.01);vec2 normal=vec2(-delta.y,delta.x)/len;
           vec2 pos=mix(aStart,aEnd,aCorner.x)+normal*aCorner.y*uWidth*0.5;
-          vec2 p=pos/uResolution*2.0-1.0;gl_Position=vec4(p.x,-p.y,0.,1.);vTint=aTint;vPosition=pos;vEdge=aCorner.y;}`);
+          vec2 p=pos/uResolution*2.0-1.0;gl_Position=vec4(p.x,-p.y,0.,1.);vTint=aTint;vPosition=pos;vEdge=aCorner.y;vAlong=aCorner.x;}`);
       const fragment=compile(gl.FRAGMENT_SHADER,`
         precision mediump float;uniform vec3 uCore;uniform float uHeight;
-        varying vec4 vTint;varying vec2 vPosition;varying float vEdge;
+        varying vec4 vTint;varying vec2 vPosition;varying float vEdge;varying float vAlong;
         void main(){if(vPosition.x<uCore.x-uCore.z||vPosition.y<8.||vPosition.y>uHeight-8.)discard;
-          float alpha=vTint.a*0.22*(1.-smoothstep(0.45,1.,abs(vEdge)));
+          float alpha=vTint.a*0.65*pow(1.-vAlong,1.4)*(1.-smoothstep(0.25,1.,abs(vEdge)));
           if(distance(vPosition,uCore.xy)<uCore.z*0.92)alpha*=0.18;
           gl_FragColor=vec4(vTint.rgb,alpha);}`);
       this.quadProgram=gl.createProgram();gl.attachShader(this.quadProgram,vertex);gl.attachShader(this.quadProgram,fragment);gl.linkProgram(this.quadProgram);
