@@ -4,6 +4,12 @@ import {defaultPreferences,sanitizePreferences,mergePreferences} from '../shared
 test('desktop defaults retain requested telemetry cards with autostart disabled',()=>{
  const p=sanitizePreferences();assert.equal(p.wallpaperEnabled,false);assert.equal(p.startAtLogin,false);assert.equal(p.showMetrics,true);assert.equal(p.showMonitors,true);assert.equal(p.interactive,true);
 });
+test('old ring-flow and black-hole profiles migrate to the signal scene while keeping user settings',()=>{
+ for(const mode of ['flow','blackhole']){
+  const p=sanitizePreferences({mode,palette:'gold',particles:8000,speed:1.8,layoutVersion:3,showLabels:false});
+  assert.equal(p.mode,'signal');assert.equal(p.palette,'gold');assert.equal(p.particles,8000);assert.equal(p.speed,1.8);assert.equal(p.showLabels,false);
+ }
+});
 test('untrusted preference fields cannot become commands or unbounded renderer input',()=>{
  const p=sanitizePreferences({particles:Infinity,speed:99,glow:-1,mode:'javascript:evil',selectedDisplay:';calc',fps:999,executable:'powershell',startAtLogin:'true'});
  assert.equal(p.particles,defaultPreferences.particles);assert.equal(p.speed,3);assert.equal(p.glow,0);assert.equal(p.mode,'threebody');assert.equal(p.selectedDisplay,'primary');assert.equal(p.fps,60);assert.equal(p.startAtLogin,false);assert.equal(p.executable,undefined);

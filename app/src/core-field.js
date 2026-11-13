@@ -21,7 +21,8 @@ export function portPosition(band, time, core) {
 // ring outlet, and continues along the selected engine's path. Both renderers
 // consume this same curve, so there is no visual seam at the circle boundary.
 export function transportPosition(p, phase, time, core, field, mode) {
-  const port = portPosition(p.band, time, core);
+  const source = mode === 'signal' ? emissionPort(p, time, core) : null;
+  const port = source ? [source.x, source.y] : portPosition(p.band, time, core);
   const noise = (p.v - .5) * 15 + Math.sin(p.a + time * .4) * 1.5;
   port[1] += noise * .18;
   if (phase < .16) {
@@ -43,10 +44,6 @@ export function transportPosition(p, phase, time, core, field, mode) {
     const exit = [x + width * .69, y + Math.sin(p.band * 1.25 + time * .14) * scale * 1.16 + noise];
     return bezier([well[0], well[1] + noise * .12], [well[0] + scale * .45, well[1] - Math.sin(p.band + time * .2) * scale * .4], [exit[0] - width * .12, exit[1]], exit, q);
   }
-  if (mode === 'blackhole') {
-    const end = [x - scale * .20, y - 2 + noise * .12];
-    return bezier(port, [port[0] + reach * .35, port[1] + noise], [x - scale * .75, y + (p.band - 2) * scale * .095 + noise], end, u);
-  }
   if (mode === 'neural') {
     const start = [x - width * .47, y + (Math.floor(p.v * 7) / 6 - .5) * scale * 1.8];
     if (u < .22) return bezier(port, [port[0] + reach * .2, port[1]], [start[0] - 25, start[1]], start, u / .22);
@@ -54,11 +51,9 @@ export function transportPosition(p, phase, time, core, field, mode) {
     const a = Math.floor(((p.v + layer * .173) % 1) * 7), b = Math.floor(((p.v + (layer + 1) * .173) % 1) * 7);
     return [start[0] + (layer + progress) / 5 * width * .92, y + ((a + (b - a) * progress) / 6 - .5) * scale * 1.8];
   }
-  const start = [x - scale * 1.30, y];
-  if (u < .35) return bezier(port, [port[0] + reach * .25, port[1]], [start[0] - scale * .12, y + noise], start, u / .35);
-  const angle = Math.PI + (u - .35) / .65 * TAU;
-  const radius = scale * (1.30 + (p.v - .5) * .20);
-  return [x + Math.cos(angle) * radius, y + Math.sin(angle) * radius * .47 + Math.sin(angle * 2) * scale * .09];
+  const end = [x + width * .32, y + (p.band - 2) * scale * .20 + noise];
+  return bezier(port, [port[0] + normal[0]*reach*.40, port[1] + normal[1]*reach*.40],
+    [x + width*.02, y + (p.band-2)*scale*.16 + noise*.4], end, u);
 }
 export function waveEnergy(point, waves, time, radius) {
   let energy = 0;

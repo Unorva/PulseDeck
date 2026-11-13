@@ -3,6 +3,7 @@ import { transportPosition, portPosition, waveEnergy,emissionPort } from './core
 import {sampleGravityStream,createThreeBodies,stepThreeBodies} from './gravity-field.js';
 import { channelActivity, channelColor, metricChannels } from './metric-field.js';
 import {traceMetricTransport,routeToTarget} from './metric-transport.js';
+import {scenes} from '../shared/scenes.mjs';
 const TAU = Math.PI * 2;
 const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
 export const palettes = {
@@ -11,13 +12,7 @@ export const palettes = {
   cyan: { name: '深海蓝', rgb: [78, 195, 246], hot: [168, 244, 255], css: '#4ec3f6' },
   violet: { name: '星云紫', rgb: [180, 148, 245], hot: [248, 181, 239], css: '#b494f5' },
 };
-export const modes = [
-  { id: 'flow', name: '环状流场', en: 'ANNULAR FLOW', caption: '有序涌动 / 信息在轨道之间流淌' },
-  { id: 'blackhole', name: '黑洞引擎', en: 'EVENT HORIZON', caption: '引力透镜 / 秩序坠入事件视界' },
-  { id: 'fusion', name: '聚变引擎', en: 'STELLAR FUSION', caption: '约束与释放 / 从计算中点燃恒星' },
-  { id: 'threebody', name: '三体引擎', en: 'THREE BODY / CHAOS', caption: '三核捕获 / 混沌交会 / 引力弹射' },
-  { id: 'neural', name: '推理引擎', en: 'LAYERED INFERENCE', caption: '多层推理 / 信号在神经元之间传播' },
-];
+export const modes = scenes;
 function randomFactory(seed) {
   return () => { seed |= 0; seed = seed + 0x6D2B79F5 | 0; let a = Math.imul(seed ^ seed >>> 15, 1 | seed); a ^= a + Math.imul(a ^ a >>> 7, 61 | a); return ((a ^ a >>> 14) >>> 0) / 4294967296; };
 }
@@ -33,6 +28,7 @@ export class Observatory {
     this.channelTimes = Array(5).fill(10);
     this.metricAnchors = [];
     this.highlightedMetric = null;
+    this.haloCache = new Map();
     this.t = 10; this.last = 0; this.frame = 0; this.fpsTime = 0; this.fpsFrames = 0;
     this.pointer = { x: -1000, y: -1000 }; this.impulse = 0;
     this.waves = []; this.pulseCount = 0; this.drag = null;
@@ -168,8 +164,6 @@ export class Observatory {
     this.drawCore(cx, cy, r);
     this.frame++;
     if (this.config.clean) return;
-    this.text('N E U R A L   O B S E R V A T O R Y', 22, 25, 7, .42);
-    this.text('环状运算中枢', 22, 44, 12, .78);
     this.text(modes.find(m => m.id === this.config.mode)?.caption || '', 22, h - 17, 8, .44);
     this.text('计算 / 外逸动能耦合场 · ' + this.config.cadence.toFixed(1) + '× 节律', w * .49, h - 17, 7, .32);
   }
@@ -308,11 +302,11 @@ export class Observatory {
     if(!this.metricStreams||this.gravityTraceTime==null||Math.abs(t-this.gravityTraceTime)>.22||this.dragWell!==null){
       this.gravityTraceTime=t;
       const core={x:this.cx,y:this.cy,radius:this.radius},field={x:fcx,y:cy,width:fw,scale};
-      const wells=this.config.mode==='blackhole'?[{x:0,y:0,mass:1,radius:.215}]:this.gravityWells;
+      const wells=this.gravityWells;
       this.metricStreams=metricChannels.map((_,band)=>Array.from({length:12},(_unused,lane)=>{
         const v=(lane+.5)/12,anchor=this.metricAnchors[band]||{x:w*.91,y:h*(.22+band*.135),height:36};
         const target={x:(anchor.x+4-fcx)/scale,y:(anchor.y+(v-.5)*(anchor.height||36)*.66-cy)/scale};
-        if(this.config.mode==='threebody'||this.config.mode==='blackhole'){
+        if(this.config.mode==='threebody'){
           const port=emissionPort({v,band,a:lane*2.39996+band},t,core);
           const speed=.95+.15*Math.sin(lane*1.37),angle=port.angle*.84;
           return traceMetricTransport({x:(port.x-fcx)/scale,y:(port.y-cy)/scale},{vx:Math.cos(angle)*speed,vy:Math.sin(angle)*speed},wells,target,this.config.gravityStrength||1,lane%wells.length,lane%2?1:-1);
@@ -383,9 +377,6 @@ export class Observatory {
     }
     }
     c.globalCompositeOperation = 'source-over';
-    if (this.config.mode === 'blackhole') {
-      this.drawBlackHole(fcx,cy,scale*.215,glow,false);
-    }
     if (this.config.mode === 'fusion') {
       const gradient = c.createRadialGradient(fcx, cy, 0, fcx, cy, scale * .72 * Math.max(glow, .1));
       gradient.addColorStop(0, this.color(.5, true)); gradient.addColorStop(.18, this.color(.12, true)); gradient.addColorStop(1, this.color(0));
@@ -418,14 +409,36 @@ export class Observatory {
     this.text(modes.find(m => m.id === this.config.mode)?.en || '', fcx, cy + scale * 1.24, 7, .45, 'center');
   }
   drawBlackHole(x,y,radius,glow,hot){
-    const c=this.ctx,outer=radius*(1.65+Math.min(glow,2)*.3);
-    const halo=c.createRadialGradient(x,y,radius*.86,x,y,outer);
-    halo.addColorStop(0,this.color(0,hot));
-    halo.addColorStop(.13,this.color(.78,hot));
-    halo.addColorStop(.24,this.color(.30+glow*.12,hot));
-    halo.addColorStop(.55,this.color(.06*glow,hot));
-    halo.addColorStop(1,this.color(0,hot));
-    c.fillStyle=halo;c.fillRect(x-outer,y-outer,outer*2,outer*2);
-    c.fillStyle='#010304';c.beginPath();c.arc(x,y,radius,0,TAU);c.fill();
+    const r=Math.round(radius*2)/2,g=Math.round(clamp(glow,0,2.5)*10)/10,key=`${r}:${g}:${hot}`;
+    let sprite=this.haloCache.get(key);
+    if(!sprite){
+      sprite=document.createElement('canvas');sprite.width=sprite.height=Math.ceil(r*5.5*2);
+      const c=sprite.getContext('2d'),extent=sprite.width/4;
+      c.setTransform(2,0,0,2,sprite.width/2,sprite.height/2);
+      const bloom=c.createRadialGradient(0,0,r*.95,0,0,r*2.6);
+      bloom.addColorStop(0,'rgba(255,176,89,0)');
+      bloom.addColorStop(.12,`rgba(255,161,62,${.15*g})`);
+      bloom.addColorStop(.4,`rgba(213,83,23,${.05*g})`);
+      bloom.addColorStop(1,'rgba(180,60,12,0)');
+      c.fillStyle=bloom;c.fillRect(-extent,-extent,extent*2,extent*2);
+      // A broad, uneven luminous crescent surrounds the shadow. It has no
+      // tilted orbit bands; the thin inner photon rim remains part of the halo.
+      const peak=hot?Math.PI*.72:-Math.PI*.28;
+      c.globalCompositeOperation='lighter';
+      for(let i=0;i<96;i++){
+        const a=i/96*TAU,bright=Math.pow((1+Math.cos(a-peak))/2,2.2);
+        c.strokeStyle=`rgba(255,${Math.round(144+bright*82)},${Math.round(65+bright*108)},${.12+bright*.76})`;
+        c.shadowColor=`rgba(255,150,58,${.22*g})`;c.shadowBlur=r*(.18+.22*g);
+        c.lineWidth=r*(.10+bright*.24);c.beginPath();c.arc(0,0,r*(1.11+bright*.035),a,a+TAU/96+.008);c.stroke();
+      }
+      c.shadowBlur=0;
+      c.strokeStyle='rgba(255,237,204,.46)';c.lineWidth=Math.max(.55,r*.035);
+      c.beginPath();c.arc(0,0,r*1.025,0,TAU);c.stroke();
+      c.globalCompositeOperation='source-over';c.fillStyle='#010203';
+      c.beginPath();c.arc(-r*.018,r*.012,r,0,TAU);c.fill();
+      if(this.haloCache.size>=32)this.haloCache.delete(this.haloCache.keys().next().value);
+      this.haloCache.set(key,sprite);
+    }
+    this.ctx.drawImage(sprite,x-sprite.width/4,y-sprite.height/4,sprite.width/2,sprite.height/2);
   }
 }

@@ -4,13 +4,14 @@ import { toPng } from 'html-to-image';
 import { Observatory, modes, palettes } from './engine.js';
 import { useTelemetry, formatRate, formatPercent, formatBytes } from './telemetry.js';
 import { metricChannels, channelColor } from './metric-field.js';
+import {normalizeScene} from '../shared/scenes.mjs';
 
 const defaults = { mode: 'threebody', palette: 'silver', speed: 1, particles: 12000, glow: 1, cadence: 1, neural: true, paused: false, thresholds: { cpu: 85, memory: 85, gpu: 90 } };
 function loadSettings() {
   try {
     const s = JSON.parse(localStorage.getItem('pulsedeck.settings.v1')) || {};
     const num = (name, min, max) => Number.isFinite(s[name]) ? Math.max(min, Math.min(max, s[name])) : defaults[name];
-    return { ...defaults, mode: modes.some(m => m.id === s.mode) ? s.mode : defaults.mode, palette: palettes[s.palette] ? s.palette : 'silver', speed: num('speed', .2, 3), particles: Math.round(num('particles', 2000, 24000) / 1000) * 1000, glow: num('glow', 0, 2), cadence: num('cadence', .2, 3), neural: s.neural !== false, thresholds: { ...defaults.thresholds, ...Object.fromEntries(Object.entries(s.thresholds || {}).filter(([k, v]) => ['cpu', 'memory', 'gpu'].includes(k) && Number.isFinite(v) && v >= 10 && v <= 100)) } };
+    return { ...defaults, mode: normalizeScene(s.mode), palette: palettes[s.palette] ? s.palette : 'silver', speed: num('speed', .2, 3), particles: Math.round(num('particles', 2000, 24000) / 1000) * 1000, glow: num('glow', 0, 2), cadence: num('cadence', .2, 3), neural: s.neural !== false, thresholds: { ...defaults.thresholds, ...Object.fromEntries(Object.entries(s.thresholds || {}).filter(([k, v]) => ['cpu', 'memory', 'gpu'].includes(k) && Number.isFinite(v) && v >= 10 && v <= 100)) } };
   } catch { return defaults; }
 }
 function Sparkline({ values, color, bars = false, label }) {
@@ -100,7 +101,7 @@ export function App({displayOnly=false,preferencesOverride=null}) {
       if (e.target.closest('input,select,textarea') || e.ctrlKey || e.metaKey || e.altKey || settings || detail || capture) return;
       if (e.code === 'Space' && e.target.closest('button')) return;
       if (e.code === 'Space') { e.preventDefault(); setConfig(c => ({ ...c, paused: !c.paused })); }
-      if (/^[1-5]$/.test(e.key)) update('mode', modes[Number(e.key) - 1].id);
+      if (/^[1-9]$/.test(e.key) && modes[Number(e.key)-1]) update('mode', modes[Number(e.key) - 1].id);
       if (e.key.toLowerCase() === 'h') setImmersive(s => !s);
       if (e.key.toLowerCase() === 'f') toggleFullscreen();
       if (e.key === 'Escape') setImmersive(false);
@@ -166,7 +167,7 @@ export function App({displayOnly=false,preferencesOverride=null}) {
         <div className="card-foot"><span>1 Hz / {connected ? '本机只读采集' : '自动重连中'}</span><span>{data?.timestamp ? new Date(data.timestamp).toLocaleTimeString('en-GB') : '—'}</span></div>
       </article>
     </section>}
-    {!displayOnly&&<footer className="statusbar"><span><i className={connected ? 'status-dot live' : 'status-dot'} />{connected ? 'LIVE' : 'OFFLINE'} / READ ONLY <b>{hardware.cpu || 'LOCAL TELEMETRY'}</b></span><span>{config.particles.toLocaleString()} PARTICLES / {mode.en} / {fps} FPS / {engine.current?.field.gl ? 'WEBGL' : 'CANVAS 2D'}</span><span className="keyboard-hint">1–5 切换 · SPACE 暂停 · H 沉浸</span></footer>}
+    {!displayOnly&&<footer className="statusbar"><span><i className={connected ? 'status-dot live' : 'status-dot'} />{connected ? 'LIVE' : 'OFFLINE'} / READ ONLY <b>{hardware.cpu || 'LOCAL TELEMETRY'}</b></span><span>{config.particles.toLocaleString()} PARTICLES / {mode.en} / {fps} FPS / {engine.current?.field.gl ? 'WEBGL' : 'CANVAS 2D'}</span><span className="keyboard-hint">1–4 切换 · SPACE 暂停 · H 沉浸</span></footer>}
     {settings && <Dialog title="调节流动" onClose={() => setSettings(false)} className="settings-dialog">
       <p className="settings-description">让计算变得可见。神经网络、计算圆环与粒子流随本机负载持续演化。</p>
       <div className="settings-section"><span className="eyebrow">VISUAL CONTROLS</span>

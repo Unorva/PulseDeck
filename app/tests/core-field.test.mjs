@@ -9,7 +9,7 @@ test('Bezier transport preserves both endpoints', () => {
   assert.deepEqual(bezier([1, 2], [3, 9], [7, 8], [10, 12], 1), [10, 12]);
 });
 test('core-to-field transport crosses the ring without a discontinuity in every mode', () => {
-  for (const mode of ['flow', 'blackhole', 'fusion', 'threebody', 'neural']) {
+  for (const mode of ['signal', 'fusion', 'threebody', 'neural']) {
     const before = transportPosition(particle, .16 - 1e-7, 4, core, field, mode);
     const after = transportPosition(particle, .16 + 1e-7, 4, core, field, mode);
     assert.ok(Math.hypot(before[0] - after[0], before[1] - after[1]) < .01, mode);

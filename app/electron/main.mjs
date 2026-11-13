@@ -5,6 +5,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createCollector } from '../server/telemetry.mjs';
 import { defaultPreferences, sanitizePreferences, mergePreferences } from '../shared/preferences.mjs';
+import {scenes} from '../shared/scenes.mjs';
 
 const here=path.dirname(fileURLToPath(import.meta.url));
 protocol.registerSchemesAsPrivileged([{scheme:'pulsedeck',privileges:{standard:true,secure:true,supportFetchAPI:true}}]);
@@ -103,7 +104,7 @@ function updateTray(){
     {label:'打开 PulseDeck 设置',click:openSettings},{label:'独立展示窗口',click:openDisplay},
     {label:desktop.active?'停止桌面壁纸':'应用到桌面',click:()=>desktop.active?stopWallpaper():startWallpaper().catch(reportError)},
     {label:preferences.paused?'继续动画':'暂停动画',click:()=>{preferences={...preferences,paused:!preferences.paused};save();broadcast();}},
-    {type:'separator'},{label:'切换引擎',submenu:[['flow','环状流场'],['blackhole','黑洞'],['fusion','聚变'],['threebody','三体'],['neural','推理网络']].map(([mode,label])=>({label,type:'radio',checked:preferences.mode===mode,click:()=>{preferences={...preferences,mode};save();broadcast();}}))},
+    {type:'separator'},{label:'切换引擎',submenu:scenes.map(({id:mode,name:label})=>({label,type:'radio',checked:preferences.mode===mode,click:()=>{preferences={...preferences,mode};save();broadcast();}}))},
     {type:'separator'},{label:'退出 PulseDeck',click:()=>app.quit()},
   ]));
 }
