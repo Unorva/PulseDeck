@@ -1,7 +1,7 @@
 @echo off
 setlocal
-if exist "%~dp0release\PulseDeck-Portable-0.4.7-x64.exe" (
-  start "" "%~dp0release\PulseDeck-Portable-0.4.7-x64.exe"
+if exist "%~dp0release\PulseDeck-Portable-0.4.8-x64.exe" (
+  start "" "%~dp0release\PulseDeck-Portable-0.4.8-x64.exe"
   exit /b 0
 )
 if exist "%~dp0release\win-unpacked\PulseDeck.exe" (
