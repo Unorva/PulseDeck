@@ -15,15 +15,15 @@ test('rim data moves outward with radial tails and fades at both ends of its tra
  assert.ok(rimDataParticle(0,1,0,core).radius!==rimDataParticle(1,1,0,core).radius);
 });
 
-test('rim diffusion stays on the shared output layer and never spreads around the back of the ring',()=>{
+test('radial data bars stay on the output-ring surface and never extend beyond it',()=>{
  for(const time of [0,12,80])for(let index=0;index<360;index++){
   const lane=index%120,p=rimDataParticle(index,1,time,core),v=(lane+.5)/120;
   const port=emissionPort({v,a:lane*2.3999632297,band:index%5},time,core);
   const angle=Math.atan2(p.y-core.y,p.x-core.x);
   assert.ok(Math.abs(angle-port.angle)<1e-10);
-  assert.ok(p.x>core.x&&p.radius>=core.radius*1.025);
-  assert.ok(p.radius<core.radius*1.13,'data bars must stay close to the ring');
-  assert.ok(Math.hypot(p.tailX-core.x,p.tailY-core.y)>=core.radius*1.025-1e-8,'tails must not enter inner ring layers');
+  assert.ok(p.x>core.x&&p.radius>=core.radius*.975);
+  assert.ok(p.radius<=core.radius*1.025,'data bars must be on the ring, not outside it');
+  assert.ok(Math.hypot(p.tailX-core.x,p.tailY-core.y)>=core.radius*.975-1e-8,'tails must stay in the output layer');
   const tangent={x:-Math.sin(angle),y:Math.cos(angle)};
   assert.ok(Math.abs((p.x-p.tailX)*tangent.x+(p.y-p.tailY)*tangent.y)<1e-8,'each data bar must be perpendicular to the rim');
  }

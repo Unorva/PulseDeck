@@ -10,18 +10,18 @@ export function wellPosition(index, time, x, y, scale) {
   return [x + Math.cos(angle) * scale * radius, y + Math.sin(angle) * scale * radius*.78 +Math.sin(time*.27+index)*scale*.035];
 }
 export function emissionEnvelope(v){return Math.max(0,Math.cos((clamp(v,0,1)-.5)*Math.PI))**1.7;}
-// Fine radial data bars travel across a narrow band on the output ring.
-// Repeated packets share a normal; the remaining concentric rings stay intact.
+// Fine radial data bars are painted on the output-ring surface itself.
+// Repeated packets share a normal and never extend beyond the circular rim.
 export function rimDataParticle(index,motionTime,time,core){
   const lane=index%120;
   const seed=(index*.61803398875)%1;
   const phase=((index*.38196601125+motionTime*(.19+seed*.13))%1+1)%1;
   const source=emissionPort({v:(lane+.5)/120,a:lane*2.3999632297,band:index%5},time,core);
-  const angle=source.angle,baseRadius=core.radius*1.025;
-  const radius=baseRadius+core.radius*(.004+phase*(.06+seed*.035));
+  const angle=source.angle,baseRadius=core.radius*.975;
+  const radius=baseRadius+core.radius*.05*phase;
   const nx=Math.cos(angle),ny=Math.sin(angle);
   const opacity=Math.sin(phase*Math.PI)**1.35*source.opacity;
-  const tail=Math.min(radius-baseRadius,core.radius*(.026+seed*.022));
+  const tail=Math.min(radius-baseRadius,core.radius*(.018+seed*.015));
   return {x:core.x+nx*radius,y:core.y+ny*radius,
     tailX:core.x+nx*(radius-tail),tailY:core.y+ny*(radius-tail),
     opacity,phase,radius};
