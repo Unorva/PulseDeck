@@ -3,6 +3,7 @@ import { Atom, Pause, Play, ArrowsOut, ArrowsIn, SlidersHorizontal, X, Camera, A
 import { toPng } from 'html-to-image';
 import { Observatory, modes, palettes } from './engine.js';
 import { useTelemetry, formatRate, formatPercent, formatBytes } from './telemetry.js';
+import { metricChannels, channelColor } from './metric-field.js';
 
 const defaults = { mode: 'threebody', palette: 'silver', speed: 1, particles: 12000, glow: 1, cadence: 1, neural: true, paused: false, thresholds: { cpu: 85, memory: 85, gpu: 90 } };
 function loadSettings() {
@@ -50,13 +51,7 @@ function Dialog({ children, title, onClose, className = '' }) {
     <div className="dialog-heading"><div><span className="eyebrow">PULSEDECK / OBSERVATORY</span><h2>{title}</h2></div><button onClick={onClose} className="icon-button" aria-label="关闭"><X size={18} /></button></div>{children}
   </dialog>;
 }
-const metricMeta = [
-  { key: 'cpu', label: '处理器', en: 'PROCESSOR' },
-  { key: 'memory', label: '内存', en: 'MEMORY' },
-  { key: 'gpu', label: '显卡', en: 'GRAPHICS' },
-  { key: 'download', label: '下载', en: 'DOWNLINK' },
-  { key: 'upload', label: '上传', en: 'UPLINK' },
-];
+const metricMeta = metricChannels;
 export function App({displayOnly=false,preferencesOverride=null}) {
   const [localConfig, setConfig] = useState(loadSettings);
   const config=preferencesOverride||localConfig;
@@ -65,6 +60,8 @@ export function App({displayOnly=false,preferencesOverride=null}) {
   const [fps, setFps] = useState(0), [toast, setToast] = useState(''), [exporting, setExporting] = useState(false);
   const [capture, setCapture] = useState(null);
   const canvas = useRef(null), particleCanvas = useRef(null), engine = useRef(null), root = useRef(null);
+  const rail = useRef(null);
+  const [highlightedMetric, setHighlightedMetric] = useState(null);
   const { data, history, state, age, events } = useTelemetry();
   const metric = data?.metrics || {}, hardware = data?.hardware || {};
   const palette = palettes[config.palette], mode = modes.find(m => m.id === config.mode);
@@ -73,6 +70,18 @@ export function App({displayOnly=false,preferencesOverride=null}) {
   useEffect(() => { engine.current = new Observatory(canvas.current, setFps, particleCanvas.current); return () => engine.current.dispose(); }, []);
   useEffect(() => { engine.current?.setConfig({...config,clean:displayOnly&&!config.showLabels}); if(!preferencesOverride)localStorage.setItem('pulsedeck.settings.v1', JSON.stringify({ ...config, paused: false })); }, [config,displayOnly]);
   useEffect(() => { engine.current?.setMetrics({ ...metric, sequence: data?.sequence }); }, [data]);
+  useEffect(() => { engine.current?.setHighlightedMetric(highlightedMetric); }, [highlightedMetric]);
+  useEffect(() => {
+    const measure = () => {
+      const box = canvas.current.getBoundingClientRect();
+      engine.current?.setMetricAnchors(Array.from(rail.current?.children || []).map(item => {
+        const r = item.getBoundingClientRect(); return {x:r.left-box.left,y:r.top-box.top+r.height/2};
+      }));
+    };
+    const observer = new ResizeObserver(measure); observer.observe(canvas.current);
+    if (rail.current) observer.observe(rail.current);
+    measure(); return () => observer.disconnect();
+  }, [displayOnly, config.showMetrics]);
   useEffect(()=>window.pulseDeck?.onPointer?.(point=>engine.current?.externalPointer(point)),[]);
   useEffect(() => { if (!toast) return; const timer = setTimeout(() => setToast(''), 3500); return () => clearTimeout(timer); }, [toast]);
   useEffect(() => { const sync = () => setFullscreen(Boolean(document.fullscreenElement)); document.addEventListener('fullscreenchange', sync); return () => document.removeEventListener('fullscreenchange', sync); }, []);
@@ -125,7 +134,7 @@ export function App({displayOnly=false,preferencesOverride=null}) {
       <canvas ref={particleCanvas} className="particle-field" aria-hidden="true" />
       <canvas ref={canvas} className="universe" role="img" aria-label={`${mode.name}：由本机硬件数据驱动的神经网络与粒子流，可移动指针或点击扰动流场`} />
       {!displayOnly&&<div className="mode-tabs" role="group" aria-label="可视化模式">{modes.map((m, i) => <button key={m.id} aria-pressed={config.mode === m.id} className={config.mode === m.id ? 'active' : ''} onClick={() => update('mode', m.id)} title={`${i + 1}：${m.name}`}><span className="mode-number">0{i + 1}</span>{m.name}</button>)}</div>}
-      {(!displayOnly||config.showMetrics)&&<div className="metric-rail">{metricMeta.map((m, i) => <button tabIndex={displayOnly?-1:0} className={`rail-item ${overload.some(o => o.key === m.key) ? 'overload' : ''}`} key={m.key} onClick={() => {if(!displayOnly)setDetail(m.key);}} aria-label={`查看${m.label}详情`}><span className="rail-top">{m.label}<em>0{i + 1}</em></span><strong><MetricValue text={display(m.key)} /></strong><span className="rail-bottom">{Number.isFinite(metric[m.key]) ? '实时采样 / 并行计算' : '等待可用数据'}</span></button>)}</div>}
+      {(!displayOnly||config.showMetrics)&&<div ref={rail} className="metric-rail">{metricMeta.map((m, i) => <button tabIndex={displayOnly?-1:0} className={`rail-item ${highlightedMetric === m.key ? 'channel-highlight' : ''} ${overload.some(o => o.key === m.key) ? 'overload' : ''}`} style={{'--channel':`rgb(${channelColor(i,palette.rgb).join(',')})`}} data-channel={m.key} key={m.key} onPointerEnter={() => setHighlightedMetric(m.key)} onPointerLeave={() => setHighlightedMetric(null)} onFocus={() => setHighlightedMetric(m.key)} onBlur={() => setHighlightedMetric(null)} onClick={() => {if(!displayOnly)setDetail(m.key);}} aria-label={`${m.label} ${display(m.key)}，${m.binding}`}><span className="rail-top"><i className="channel-dot"/>{m.label}<em>0{i + 1}</em></span><strong><MetricValue text={display(m.key)} /></strong><span className="rail-bottom">{Number.isFinite(metric[m.key]) ? m.binding : '暂无数据 · 低速待机'}</span></button>)}</div>}
       {!displayOnly&&<><div className="stage-corner"><span className="crosshair" /><span>LIVE FIELD / {mode.en}</span></div><button className="pulse-button" onClick={() =>engine.current.triggerImpulse(engine.current.cx,engine.current.cy)}><Lightning size={11} />注入脉冲</button></>}
       {!displayOnly&&config.paused && <div className="paused-indicator">视觉运动已暂停 · 遥测持续采样</div>}
       {!displayOnly&&!!overload.length && <div className="overload-indicator">{overload.map(m => m.label).join(' / ')}负载超过提示阈值</div>}

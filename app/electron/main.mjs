@@ -28,7 +28,8 @@ function guardNavigation(win){
 }
 function createWindow(options,view){
   const win=new BrowserWindow({...options,icon:path.join(here,'assets','icon.png'),webPreferences:{preload:path.join(here,'preload.cjs'),contextIsolation:true,nodeIntegration:false,sandbox:true,backgroundThrottling:false,spellcheck:false}});
-  win.setMenu(null);guardNavigation(win);win.loadURL(`pulsedeck://app/index.html?view=${view}`);
+  win.setMenu(null);guardNavigation(win);
+  win.loadURL(`pulsedeck://app/index.html?view=${view}`).catch(error=>{if(!win.isDestroyed())reportError(new Error(`页面载入失败：${error.message}`));});
   win.on('page-title-updated',event=>{event.preventDefault();win.setTitle(options.title);});
   return win;
 }
@@ -62,7 +63,17 @@ async function startWallpaper(){
   const bounds=target.bounds;
   const win=createWindow({...bounds,title:'PulseDeck Wallpaper',frame:false,skipTaskbar:true,focusable:false,resizable:false,movable:false,show:false,backgroundColor:'#050809',hasShadow:false},'display');
   wallpaperWindow=win;
-  await new Promise((resolve,reject)=>{win.webContents.once('did-finish-load',resolve);win.webContents.once('did-fail-load',(_e,code,description)=>reject(new Error(`展示页面未能载入 (${code}): ${description}`)));});
+  try {
+    await new Promise((resolve,reject)=>{
+      const contents=win.webContents;
+      const timer=setTimeout(()=>finish(new Error('桌面展示页面载入超时，请重新应用壁纸。')),15000);
+      const loaded=()=>finish();
+      const failed=(_e,code,description,_url,isMainFrame)=>{if(isMainFrame)finish(new Error(`展示页面未能载入 (${code}): ${description}`));};
+      const closed=()=>finish(new Error('桌面展示窗口已关闭。'));
+      function finish(error){clearTimeout(timer);contents.removeListener('did-finish-load',loaded);contents.removeListener('did-fail-load',failed);win.removeListener('closed',closed);error?reject(error):resolve();}
+      win.webContents.once('did-finish-load',loaded);win.webContents.on('did-fail-load',failed);win.once('closed',closed);
+    });
+  } catch(error){if(token===transition)stopWallpaper();throw error;}
   if(token!==transition||win.isDestroyed())return;
   const handle=win.getNativeWindowHandle();const hwnd=handle.length===8?handle.readBigUInt64LE().toString():String(handle.readUInt32LE());
   const physical=screen.dipToScreenRect?screen.dipToScreenRect(win,bounds):bounds;
@@ -74,7 +85,15 @@ async function startWallpaper(){
       win.webContents.send('pulsedeck:desktop-pointer',message);
       if(covered!==message.covered){covered=message.covered;refreshSuspension();}
     },()=>{if(token===transition&&!quitting){preferences={...preferences,wallpaperEnabled:false};desktop={...desktop,active:false,status:'disconnected',error:'桌面层已断开，可以重新应用壁纸。'};save();broadcast();}});
-    preferences={...preferences,wallpaperEnabled:true};desktop={active:true,status:'wallpaper',error:null,suspended:false};save();broadcast();
+    // Show through Electron as well as Win32: native ShowWindow alone leaves
+    // Chromium's child surface in its initially hidden state on some desktops.
+    win.showInactive();
+    win.webContents.invalidate();
+    win.webContents.on('render-process-gone',(_event,details)=>{
+      if(token!==transition||quitting)return;
+      stopWallpaper();reportError(new Error(`桌面渲染已停止 (${details.reason})，请重新应用壁纸。`));
+    });
+    preferences={...preferences,wallpaperEnabled:true};desktop={active:true,status:'wallpaper',error:null,suspended:false};save();refreshSuspension();broadcast();
   } catch(error){if(token===transition){stopWallpaper();desktop.error=error.message;broadcast();}throw error;}
 }
 function updateTray(){

@@ -13,6 +13,7 @@
 - The computation ring should be slightly wider, with fine radial streamlines perpendicular to the rim and continuous normal-direction discharge into the field.
 - Black holes must be larger and mutually attract each other. Their positions and velocities evolve from pairwise forces; dragging one changes the other two trajectories as well as the particle field.
 - Particle strokes need visible, soft thickness and continuous curved flow. Avoid fixed laser outlets, synchronized emission packets, and disconnected bright spray.
+- Latest correction (2026-11-13): desktop wallpaper must visibly render; CPU drives its particle group's speed, memory drives density, GPU and each network direction drive their own speed/density. Match all five groups to the right-hand cards with shared colors and connector lines. Remove the central English lettering and opaque label plate from the left neural sphere.
 
 Run the local server yourself and open the preview in the browser available to this environment. Do not give the user server-start instructions when you can run it.
 

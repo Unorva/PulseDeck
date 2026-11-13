@@ -3,6 +3,20 @@
 export class ParticleLayer {
   constructor(canvas) {
     this.canvas = canvas;
+    try { this.initialize(); }
+    catch (error) {
+      console.warn('Particle acceleration unavailable; using Canvas 2D.', error);
+      this.dispose(); this.gl = null;
+    }
+    this.lost = event => { event.preventDefault(); this.gl = null; };
+    this.restored = () => {
+      try { this.initialize(); } catch { this.gl = null; }
+    };
+    canvas?.addEventListener('webglcontextlost', this.lost);
+    canvas?.addEventListener('webglcontextrestored', this.restored);
+  }
+  initialize() {
+    const canvas = this.canvas;
     this.gl = canvas?.getContext('webgl', { alpha: true, antialias: false, depth: false, premultipliedAlpha: false, preserveDrawingBuffer: true });
     if (!this.gl) return;
     const gl = this.gl;
@@ -96,5 +110,13 @@ export class ParticleLayer {
     if(!this.quadProgram){gl.uniform1f(this.uniforms.uPoints, 0);gl.drawArrays(gl.LINES,0,count*2);}
     if (glow > 0) { gl.uniform1f(this.uniforms.uPoints, 1); gl.drawArrays(gl.POINTS, 0, count * 2); }
   }
-  dispose() { if (!this.gl) return; this.gl.deleteBuffer(this.buffer); this.gl.deleteProgram(this.program);if(this.cornerBuffer)this.gl.deleteBuffer(this.cornerBuffer);if(this.quadProgram)this.gl.deleteProgram(this.quadProgram); }
+  dispose() {
+    this.canvas?.removeEventListener('webglcontextlost', this.lost);
+    this.canvas?.removeEventListener('webglcontextrestored', this.restored);
+    if (!this.gl) return;
+    if(this.buffer)this.gl.deleteBuffer(this.buffer);
+    if(this.program)this.gl.deleteProgram(this.program);
+    if(this.cornerBuffer)this.gl.deleteBuffer(this.cornerBuffer);
+    if(this.quadProgram)this.gl.deleteProgram(this.quadProgram);
+  }
 }
