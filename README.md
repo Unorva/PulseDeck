@@ -6,6 +6,27 @@ PulseDeck 是一款 Windows 动态桌面壁纸与本机硬件观测工具。神�
 
 [下载最新版本](https://github.com/Unorva/PulseDeck/releases/latest) · [版本记录](https://github.com/Unorva/PulseDeck/releases) · [反馈问题](https://github.com/Unorva/PulseDeck/issues)
 
+## 运行预览
+
+**三体引擎**：神经计算圆环、相互吸引的三颗黑洞、五组指标粒子，以及完整的硬件监测卡片。
+
+![PulseDeck 三体引擎：神经圆环、三颗黑洞与实时硬件监测](docs/images/three-body.jpg)
+
+<details>
+<summary>查看矩阵计算与设置界面</summary>
+
+**矩阵计算**：信号通过六层计算节点，再流向对应的指标卡片。
+
+![PulseDeck 矩阵计算：六层节点与跨层信号传递](docs/images/matrix-compute.jpg)
+
+**设置界面**：独立管理场景、配色、视觉交互、桌面和性能选项。
+
+![PulseDeck 设置界面：场景预览、四种引擎与光谱配色](docs/images/settings.jpg)
+
+</details>
+
+以上为 v0.4.9 在本机浏览器预览中截取的真实运行画面，读数为截图时的本机状态。Windows 应用共用这些展示与设置页面，桌面嵌入和托盘功能通过 Windows 应用启用。
+
 ## 下载与开始使用
 
 首个公开版本为 **v0.4.9**，适用于 **Windows 10 / 11 x64**。安装包包含运行时，无需安装 Node.js 或开启浏览器。
