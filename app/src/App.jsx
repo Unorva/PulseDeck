@@ -75,7 +75,7 @@ export function App({displayOnly=false,preferencesOverride=null}) {
     const measure = () => {
       const box = canvas.current.getBoundingClientRect();
       engine.current?.setMetricAnchors(Array.from(rail.current?.children || []).map(item => {
-        const r = item.getBoundingClientRect(); return {x:r.left-box.left,y:r.top-box.top+r.height/2};
+        const r = item.getBoundingClientRect(); return {x:r.left-box.left,y:r.top-box.top+r.height/2,height:r.height};
       }));
     };
     const observer = new ResizeObserver(measure); observer.observe(canvas.current);

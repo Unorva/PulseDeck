@@ -76,11 +76,10 @@ async function startWallpaper(){
   } catch(error){if(token===transition)stopWallpaper();throw error;}
   if(token!==transition||win.isDestroyed())return;
   const handle=win.getNativeWindowHandle();const hwnd=handle.length===8?handle.readBigUInt64LE().toString():String(handle.readUInt32LE());
-  const physical=screen.dipToScreenRect?screen.dipToScreenRect(win,bounds):bounds;
   try {
     const {default:native}=await import('./wallpaper-native.cjs');
     if(token!==transition||win.isDestroyed())return;
-    wallpaperHelper=native.attachToDesktop(Number(hwnd),physical,message=>{
+    wallpaperHelper=native.attachToDesktop(Number(hwnd),native.monitorBounds(Number(hwnd)),message=>{
       if(token!==transition||win.isDestroyed())return;
       win.webContents.send('pulsedeck:desktop-pointer',message);
       if(covered!==message.covered){covered=message.covered;refreshSuspension();}
@@ -88,6 +87,7 @@ async function startWallpaper(){
     // Show through Electron as well as Win32: native ShowWindow alone leaves
     // Chromium's child surface in its initially hidden state on some desktops.
     win.showInactive();
+    wallpaperHelper.fit();
     win.webContents.invalidate();
     win.webContents.on('render-process-gone',(_event,details)=>{
       if(token!==transition||quitting)return;

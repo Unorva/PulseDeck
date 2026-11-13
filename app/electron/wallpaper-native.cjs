@@ -5,6 +5,7 @@ function win32(){
   const lib=koffi.load('user32.dll');
   koffi.struct('PulsePoint',{x:'int32',y:'int32'});
   koffi.struct('PulseRect',{left:'int32',top:'int32',right:'int32',bottom:'int32'});
+  koffi.struct('PulseMonitorInfo',{cbSize:'uint32',monitor:'PulseRect',work:'PulseRect',flags:'uint32'});
   koffi.proto('int32 __stdcall PulseEnumProc(intptr_t hwnd,intptr_t data)');
   const signatures={
     find:'intptr_t __stdcall FindWindowW(str16 className,str16 title)',
@@ -21,6 +22,9 @@ function win32(){
     rect:'int32 __stdcall GetWindowRect(intptr_t hwnd,_Out_ PulseRect *rect)',
     client:'int32 __stdcall GetClientRect(intptr_t hwnd,_Out_ PulseRect *rect)',
     toClient:'int32 __stdcall ScreenToClient(intptr_t hwnd,_Inout_ PulsePoint *point)',
+    toScreen:'int32 __stdcall ClientToScreen(intptr_t hwnd,_Inout_ PulsePoint *point)',
+    monitor:'intptr_t __stdcall MonitorFromWindow(intptr_t hwnd,uint32 flags)',
+    monitorInfo:'int32 __stdcall GetMonitorInfoW(intptr_t monitor,_Inout_ PulseMonitorInfo *info)',
     cursor:'int32 __stdcall GetCursorPos(_Out_ PulsePoint *point)',
     mouse:'int16 __stdcall GetAsyncKeyState(int32 key)',
     foreground:'intptr_t __stdcall GetForegroundWindow()',
@@ -29,6 +33,16 @@ function win32(){
   api=Object.fromEntries(Object.entries(signatures).map(([name,signature])=>[name,lib.func(signature)]));return api;
 }
 function nameOf(a,hwnd){const buffer=Buffer.alloc(512);a.className(hwnd,buffer,256);return buffer.toString('utf16le').split('\0')[0];}
+function monitorBounds(hwnd){
+  const a=win32(),info={cbSize:40};
+  if(!a.monitorInfo(a.monitor(hwnd,2),info))throw new Error('无法读取显示器的实际像素范围。');
+  const r=info.monitor;return {x:r.left,y:r.top,width:r.right-r.left,height:r.bottom-r.top};
+}
+function inspectWindow(hwnd){
+  const a=win32(),outer={},client={},origin={x:0,y:0};
+  a.rect(hwnd,outer);a.client(hwnd,client);a.toScreen(hwnd,origin);
+  return {outer,client:{x:origin.x,y:origin.y,width:client.right-client.left,height:client.bottom-client.top}};
+}
 function attachToDesktop(hwnd,bounds,onPointer,onLost){
   const a=win32(),progman=a.find('Progman',null);
   if(!progman)throw new Error('Windows Explorer 桌面尚未准备好。');
@@ -37,17 +51,32 @@ function attachToDesktop(hwnd,bounds,onPointer,onLost){
   a.enumerate(top=>{if(a.findEx(top,0,'SHELLDLL_DefView',null)){const next=a.findEx(0,top,'WorkerW',null);if(next)host=next;}return 1;},0);
   if(!host)host=a.findEx(progman,0,'WorkerW',null);
   if(!host)throw new Error('未找到 Windows 壁纸层，请回到桌面后重试。');
-  const style=BigInt(a.getStyle(hwnd,-16)),extended=BigInt(a.getStyle(hwnd,-20));
-  a.setStyle(hwnd,-16,(style&~0x80000000n)|0x40000000n);
-  a.setStyle(hwnd,-20,(extended&~0x40000n)|0x80n|0x08000000n);
+  const stripFrame=()=>{
+    const style=BigInt(a.getStyle(hwnd,-16))&0xffffffffn,extended=BigInt(a.getStyle(hwnd,-20))&0xffffffffn;
+    a.setStyle(hwnd,-16,(style&~(0x80000000n|0x00cf0000n))|0x40000000n);
+    a.setStyle(hwnd,-20,(extended&~(0x40000n|0x100n|0x200n|0x20000n))|0x80n|0x08000000n);
+  };
+  stripFrame();
   a.parent(hwnd,host);
   if(BigInt(a.getParent(hwnd))!==BigInt(host))throw new Error('Windows 拒绝连接壁纸窗口。');
-  const origin={x:bounds.x,y:bounds.y};a.toClient(host,origin);
-  if(!a.position(hwnd,1,origin.x,origin.y,bounds.width,bounds.height,0x10|0x20|0x40))throw new Error('壁纸定位失败。');
+  const fit=()=>{
+    stripFrame();
+    // Match the visible client surface, including any invisible Chromium frame
+    // insets left after reparenting, to the complete physical monitor rectangle.
+    for(let pass=0;pass<2;pass++){
+      const {outer,client}=inspectWindow(hwnd);
+      const left=client.x-outer.left,top=client.y-outer.top;
+      const extraWidth=outer.right-outer.left-client.width,extraHeight=outer.bottom-outer.top-client.height;
+      const origin={x:bounds.x-left,y:bounds.y-top};a.toClient(host,origin);
+      if(!a.position(hwnd,1,origin.x,origin.y,bounds.width+extraWidth,bounds.height+extraHeight,0x10|0x20|0x40))throw new Error('壁纸定位失败。');
+    }
+  };
+  fit();
   a.show(hwnd,4);
-  let downBefore=false,previous={x:0,y:0};
+  let downBefore=false,previous={x:0,y:0},checks=0;
   const timer=setInterval(()=>{
     if(!a.exists(hwnd)||!a.exists(host)){clearInterval(timer);onLost?.();return;}
+    if(++checks%30===0){try{const {client}=inspectWindow(hwnd);if(client.x!==bounds.x||client.y!==bounds.y||client.width!==bounds.width||client.height!==bounds.height)fit();}catch{clearInterval(timer);onLost?.();return;}}
     const cursor={},client={},foregroundRect={};a.cursor(cursor);a.client(hwnd,client);
     const foreground=a.foreground(),className=nameOf(a,foreground);
     const desktop=['Progman','WorkerW','SHELLDLL_DefView'].includes(className);
@@ -58,7 +87,7 @@ function attachToDesktop(hwnd,bounds,onPointer,onLost){
     onPointer({x:cursor.x/Math.max(1,client.right),y:cursor.y/Math.max(1,client.bottom),active,down:down&&active,pressed:down&&!downBefore&&active,dx:cursor.x-previous.x,dy:cursor.y-previous.y,covered});
     previous=cursor;downBefore=down;
   },33);
-  return {host:Number(host),window:Number(hwnd),dispose:()=>clearInterval(timer)};
+  return {host:Number(host),window:Number(hwnd),fit,inspect:()=>inspectWindow(hwnd),dispose:()=>clearInterval(timer)};
 }
 function inspectDesktop(){const a=win32(),point={};a.cursor(point);return {available:Boolean(a.find('Progman',null)),cursorReadable:Number.isFinite(point.x)&&Number.isFinite(point.y)};}
-module.exports={attachToDesktop,inspectDesktop};
+module.exports={attachToDesktop,inspectDesktop,monitorBounds,inspectWindow};

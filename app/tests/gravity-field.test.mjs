@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {gravityAcceleration,stepGravityParticle,traceGravityStream,sampleGravityStream,createThreeBodies,bodyAccelerations,stepThreeBodies} from '../src/gravity-field.js';
+import {gravityAcceleration,stepGravityParticle,traceGravityStream,sampleGravityStream,createThreeBodies,bodyAccelerations,stepThreeBodies,bodyBounds} from '../src/gravity-field.js';
 test('each black hole attracts a nearby particle toward its center',()=>{
  const wells=[{x:0,y:0},{x:2,y:1},{x:-2,y:1}];
  for(const well of wells){const force=gravityAcceleration({x:well.x+.1,y:well.y},wells);assert.ok(force.x<0);}
@@ -50,4 +50,18 @@ test('dragging pins only the selected black hole while its partners keep respond
 test('the default three-body scene remains finite and visible over five simulated minutes',()=>{
  const bodies=createThreeBodies();
  for(let i=0;i<36000;i++){stepThreeBodies(bodies,1/120);for(const b of bodies)assert.ok(Number.isFinite(b.x)&&Number.isFinite(b.y)&&Math.hypot(b.x,b.y)<.8);}
+});
+test('black holes stay inside their domain after extreme drags and energetic releases',()=>{
+ for(const strength of [.2,1,2.5]){
+  const bodies=createThreeBodies();
+  stepThreeBodies(bodies,.1,strength,0,{x:100,y:-100});
+  bodies[1].vx=50;bodies[2].vy=-50;
+  for(let frame=0;frame<36000;frame++){
+   stepThreeBodies(bodies,1/120,strength);
+   for(const b of bodies){
+    assert.ok(Math.hypot(b.x/bodyBounds.x,b.y/bodyBounds.y)<=1.000001);
+    assert.ok(Math.hypot(b.vx,b.vy)<=1.200001);
+   }
+  }
+ }
 });
