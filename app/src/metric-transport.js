@@ -4,10 +4,13 @@ import {bezier} from './core-field.js';
 // Shared gravity bends the approach. Guidance keeps each signal near its
 // assigned black hole before outgoing signals fan into their metric card.
 // Only moving particles draw these paths; there are no connector-line strokes.
-export function traceMetricTransport(start,velocity,wells,target,strength=1,wellIndex=0,side=1){
+export function traceMetricTransport(start,velocity,wells,target,strength=1,wellIndex=0,side=1,launchDistance=.22){
   const well=wells[wellIndex],radius=well.radius||.058;
   const clearance=Math.max(.12,radius*1.45),entry={x:well.x-clearance*1.3,y:well.y+side*clearance};
   const state={...start,...velocity},points=[{...start}],step=.014;
+  const launchSpeed=Math.hypot(velocity.vx,velocity.vy)||1;
+  for(let i=1;i<=12;i++)points.push({x:start.x+velocity.vx/launchSpeed*launchDistance*i/12,y:start.y+velocity.vy/launchSpeed*launchDistance*i/12});
+  state.x=points[12].x;state.y=points[12].y;
   let closest=Infinity,captured=-1;
   for(let i=0;i<420;i++){
     const dx=entry.x-state.x,dy=entry.y-state.y,distance=Math.hypot(dx,dy);

@@ -22,7 +22,7 @@ export function portPosition(band, time, core) {
 // consume this same curve, so there is no visual seam at the circle boundary.
 export function transportPosition(p, phase, time, core, field, mode) {
   const source = mode === 'signal' ? emissionPort(p, time, core) : null;
-  const port = source ? [source.x, source.y] : portPosition(p.band, time, core);
+  let port = source ? [source.x, source.y] : portPosition(p.band, time, core);
   const noise = (p.v - .5) * 15 + Math.sin(p.a + time * .4) * 1.5;
   port[1] += noise * .18;
   if (phase < .16) {
@@ -30,10 +30,15 @@ export function transportPosition(p, phase, time, core, field, mode) {
     const start = [core.x + Math.cos(p.a) * core.radius * (.18 + p.v * .48), core.y + Math.sin(p.a) * core.radius * (.18 + p.v * .48)];
     return bezier(start, [start[0] + core.radius * .22, start[1]], [port[0] - core.radius * .15, port[1]], port, u);
   }
-  const u = (phase - .16) / .84;
+  const transit = (phase - .16) / .84;
+  const length=Math.hypot(port[0]-core.x,port[1]-core.y);
+  const normal=[(port[0]-core.x)/length,(port[1]-core.y)/length];
+  const launch=core.radius*.22;
+  if(transit<.14)return [port[0]+normal[0]*launch*transit/.14,port[1]+normal[1]*launch*transit/.14];
+  port=[port[0]+normal[0]*launch,port[1]+normal[1]*launch];
+  const u=(transit-.14)/.86;
   const { x, y, width, scale } = field;
   const reach = x - port[0];
-  const normal=[(port[0]-core.x)/core.radius,(port[1]-core.y)/core.radius];
   if (mode === 'threebody' || mode === 'fusion') {
     const well = mode === 'threebody' ? wellPosition(p.band % 3, time, x, y, scale) : [x, y];
     if (u < .60) {

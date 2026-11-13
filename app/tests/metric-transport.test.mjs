@@ -27,6 +27,16 @@ test('moving a black hole changes the incoming particle trajectory while retaini
  assert.ok(Math.hypot(a.points[a.join].x-b.points[b.join].x,a.points[a.join].y-b.points[b.join].y)>.01);
  assert.deepEqual(sampleGravityStream(a,1),sampleGravityStream(b,1));
 });
+test('ring particles have a visible outward normal launch before gravity bends them',()=>{
+ const start={x:-1.8,y:.2},angle=.4,velocity={vx:Math.cos(angle),vy:Math.sin(angle)};
+ const stream=traceMetricTransport(start,velocity,[{x:0,y:0}],{x:1.7,y:.4},1,0,1,.3);
+ for(let i=1;i<=12;i++){
+  const dx=stream.points[i].x-start.x,dy=stream.points[i].y-start.y;
+  assert.ok(Math.abs(dx*velocity.vy-dy*velocity.vx)<1e-10);
+  assert.ok(dx*velocity.vx+dy*velocity.vy>0);
+ }
+ assert.ok(Math.abs(Math.hypot(stream.points[12].x-start.x,stream.points[12].y-start.y)-.3)<1e-10);
+});
 test('channel clocks advance only the matching particles on the actual renderer path',()=>{
  const streams=Array.from({length:5},(_,i)=>[traceMetricTransport({x:-1.8,y:0},{vx:1,vy:0},[{x:0,y:0}],{x:1.7,y:(i-2)*.4})]);
  const engine={channelTimes:Array(5).fill(10),metricStreams:streams,config:{paused:false}};

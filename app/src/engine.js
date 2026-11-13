@@ -1,9 +1,10 @@
 import { ParticleLayer } from './particles-gl.js';
-import { transportPosition, portPosition, waveEnergy,emissionPort } from './core-field.js';
+import { transportPosition, waveEnergy,emissionPort } from './core-field.js';
 import {sampleGravityStream,createThreeBodies,stepThreeBodies} from './gravity-field.js';
 import { channelActivity, channelColor, metricChannels } from './metric-field.js';
 import {traceMetricTransport,routeToTarget} from './metric-transport.js';
 import {scenes} from '../shared/scenes.mjs';
+import {sampleResponse,sampleNodeEnergy} from './sample-core.js';
 const TAU = Math.PI * 2;
 const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
 export const palettes = {
@@ -32,6 +33,8 @@ export class Observatory {
     this.t = 10; this.last = 0; this.frame = 0; this.fpsTime = 0; this.fpsFrames = 0;
     this.pointer = { x: -1000, y: -1000 }; this.impulse = 0;
     this.waves = []; this.pulseCount = 0; this.drag = null;
+    this.sampleBursts=[];this.lastSampleSequence=null;
+    this.sampleOrbit={yaw:0,pitch:0,roll:0,targetYaw:0,targetPitch:0,targetRoll:0};
     this.orbit = { yaw: 0, pitch: 0, targetYaw: 0, targetPitch: 0 };
     this.captureTimes=[-10,-10,-10];this.captureCounts=[0,0,0];this.wellOffsets=[null,null,null];this.dragWell=null;this.bodies=createThreeBodies();
     const random = randomFactory(27);
@@ -94,10 +97,13 @@ export class Observatory {
             this.channelTimes[i] += dt * this.config.speed * channel.speed;
           });
           this.impulse *= Math.exp(-dt * 1.4);
+          const turn=1-Math.exp(-dt*1.8);
+          for(const [axis,target] of [['yaw','targetYaw'],['pitch','targetPitch'],['roll','targetRoll']])this.sampleOrbit[axis]+=(this.sampleOrbit[target]-this.sampleOrbit[axis])*turn;
         }
         this.orbit.yaw += (this.orbit.targetYaw - this.orbit.yaw) * .10;
         this.orbit.pitch += (this.orbit.targetPitch - this.orbit.pitch) * .10;
         this.waves = this.waves.filter(wave => this.t - wave.time < 3.5);
+        this.sampleBursts=this.sampleBursts.filter(burst=>this.t-burst.time<3);
         this.draw(dt);
         this.fpsFrames++; this.fpsTime += drawElapsed;
         if (this.fpsTime > 1) { this.onFrame?.(Math.round(this.fpsFrames / this.fpsTime)); this.fpsTime = 0; this.fpsFrames = 0; }
@@ -108,9 +114,16 @@ export class Observatory {
   }
   setConfig(config) { if(this.config.mode!==config.mode){this.particles.forEach(p=>{p.gravity=null;p.x=null;});this.metricStreams=null;this.lastGravityTime=null;this.wellOffsets=[null,null,null];}if(this.config.gravityStrength!==config.gravityStrength)this.gravityTraceTime=null;this.config = config; }
   setMetrics(metrics) {
-    if (metrics?.sequence && metrics.sequence !== this.metrics.sequence && metrics.sequence % 3 === 0 && this.projected?.length) {
-      const n = this.projected[(metrics.sequence * 17) % this.projected.length];
-      this.waves.push({ x: n.x, y: n.y, time: this.t, automatic: true });
+    if(Number.isFinite(metrics?.sequence)&&metrics.sequence!==this.lastSampleSequence){
+      this.lastSampleSequence=metrics.sequence;
+      if(!this.config.paused){
+        const response=sampleResponse(metrics.sequence,metrics,this.nodes.length);
+        this.sampleOrbit.targetYaw+=response.yaw;
+        this.sampleOrbit.targetPitch=clamp(this.sampleOrbit.targetPitch+response.pitch,-.55,.55);
+        this.sampleOrbit.targetRoll=clamp(this.sampleOrbit.targetRoll+response.roll,-.35,.35);
+        for(const index of response.indices)this.sampleBursts.push({...this.nodes[index],time:this.t,strength:response.strength});
+        this.sampleBursts=this.sampleBursts.slice(-24);
+      }
     }
     this.metrics = metrics || {};
   }
@@ -147,6 +160,8 @@ export class Observatory {
     if (!this.w || !this.h) return;
     const c = this.ctx, { w, h, t } = this;
     const pal = palettes[this.config.palette] || palettes.silver; this.rgb = pal.rgb; this.hot = pal.hot;
+    if(!this.haloRgb){this.haloRgb=[...pal.rgb];this.haloHotRgb=[...pal.hot];}
+    else{const blend=1-Math.exp(-Math.max(dt,.016)*5);this.haloRgb=this.haloRgb.map((v,i)=>v+(pal.rgb[i]-v)*blend);this.haloHotRgb=this.haloHotRgb.map((v,i)=>v+(pal.hot[i]-v)*blend);}
     this.channelColors = metricChannels.map((_, i) => channelColor(i, this.rgb));
     c.globalCompositeOperation = 'source-over';
     if (this.field.gl) c.clearRect(0, 0, w, h);
@@ -171,13 +186,15 @@ export class Observatory {
     const { ctx: c, t } = this;
     // Rotating, depth-projected Fibonacci network; edges preserve their 3D topology.
     const hover = this.pointer.x >= 0 ? clamp((this.pointer.x - cx) / r, -1, 1) * .10 : 0;
-    const a = t * .035 * this.config.cadence + this.orbit.yaw + hover, co = Math.cos(a), si = Math.sin(a);
-    const tilt = this.orbit.pitch + (this.pointer.x >= 0 ? clamp((this.pointer.y - cy) / r, -1, 1) * .08 : 0);
+    const a = t * .035 * this.config.cadence + this.orbit.yaw + this.sampleOrbit.yaw + hover, co = Math.cos(a), si = Math.sin(a);
+    const tilt = this.orbit.pitch + this.sampleOrbit.pitch + (this.pointer.x >= 0 ? clamp((this.pointer.y - cy) / r, -1, 1) * .08 : 0);
+    const roll=this.sampleOrbit.roll,cr=Math.cos(roll),sr=Math.sin(roll);
     const projected = this.nodes.map(n => {
-      const x = n.x * co - n.z * si, z = n.x * si + n.z * co;
-      const y = n.y * Math.cos(tilt) - z * Math.sin(tilt);
+      const rx = n.x * co - n.z * si, rz = n.x * si + n.z * co;
+      const ry = n.y * Math.cos(tilt) - rz * Math.sin(tilt);
+      const x=rx*cr-ry*sr,y=rx*sr+ry*cr,z=n.y*Math.sin(tilt)+rz*Math.cos(tilt);
       const p = { x: cx + x * r * .86, y: cy + y * r * .86, z, phase: n.phase };
-      p.energy = waveEnergy(p, this.waves, t, r);
+      p.energy = Math.max(waveEnergy(p, this.waves, t, r),sampleNodeEnergy(n,this.sampleBursts,t));
       const proximity = this.pointer.x >= 0 ? Math.exp(-Math.hypot(p.x - this.pointer.x, p.y - this.pointer.y) / 28) : 0;
       p.energy = Math.max(p.energy, proximity * .75);
       return p;
@@ -209,9 +226,10 @@ export class Observatory {
         const pulse = Math.pow(Math.max(0, Math.sin(t * .8 + p.phase)), 14);
         const opacity = .055 + (p.z + 1) * .105 + pulse * .45 + p.energy * .65;
         if ((pulse > .4 || p.energy > .15) && this.config.glow > .1) {
-          const glow = c.createRadialGradient(p.x, p.y, 0, p.x, p.y, (4 + p.energy * 7) * this.config.glow);
+          const spread=(4+p.energy*7)*this.config.glow;
+          const glow = c.createRadialGradient(p.x, p.y, 0, p.x, p.y, spread);
           glow.addColorStop(0, this.color(opacity * .5)); glow.addColorStop(1, this.color(0));
-          c.fillStyle = glow; c.fillRect(p.x - 10, p.y - 10, 20, 20);
+          c.fillStyle = glow; c.fillRect(p.x-spread,p.y-spread,spread*2,spread*2);
         }
         c.fillStyle = this.color(opacity); c.fillRect(p.x, p.y, pulse > .5 ? 1.7 : 1, pulse > .5 ? 1.7 : 1);
       }
@@ -219,10 +237,10 @@ export class Observatory {
     const ringWidth=this.config.ringWidth||1.4;
     for (let j = 0; j < 12; j++) {
       const rr = r * (.87-(ringWidth-1)*.025 + j * .0125*ringWidth);
-      this.arc(cx, cy, rr, 0, TAU, j % 3 === 0 ? .23 : .08, .5);
+      this.arc(cx, cy, rr, 0, TAU, j % 3 === 0 ? .16 : .055, .5);
       const spin = t * (.012 + j * .003) * (j % 2 ? -1 : 1);
       for (const brightPass of [false, true]) {
-        c.strokeStyle = this.color(brightPass ? .12 : .07, brightPass && j === 4); c.lineWidth = j % 3 === 0 ? 1.8 : .75; c.beginPath();
+        c.strokeStyle = this.color(brightPass ? .045 : .04); c.lineWidth = j % 3 === 0 ? .85 : .5; c.beginPath();
         for (let i = 0; i < 96; i++) {
           const ang = i / 96 * TAU + spin;
           const activity = ((i * 13 + j * 29) % 101) / 100;
@@ -234,31 +252,7 @@ export class Observatory {
         c.stroke();
       }
     }
-    // Radial light combs cross the thickness of the ring. Their direction is
-    // normal to the circular rim and matches the particles' injection velocity.
-    for(let band=0;band<3;band++){
-      const base=(band-1)*.44+Math.sin(t*.16+band*.8)*.16;
-      c.strokeStyle=this.color(.30+this.impulse*.30,band===0);c.lineWidth=.7;c.beginPath();
-      for(let n=0;n<95;n++){
-        const angle=base+(n/94-.5)*.32;
-        const moving=(n*.618+t*(.28+band*.02))%1;
-        const start=r*(.86+moving*.105),end=start+r*(.035+((n*17)%23)/23*.065);
-        c.moveTo(cx+Math.cos(angle)*start,cy+Math.sin(angle)*start);
-        c.lineTo(cx+Math.cos(angle)*end,cy+Math.sin(angle)*end);
-      }
-      c.stroke();
-    }
-    c.save(); c.globalCompositeOperation = 'lighter';
-    for (let band=0;band<5;band++) {
-      const port=portPosition(band,t,{x:cx,y:cy,radius:r});
-      const energy=.22 + .24*Math.pow(Math.max(0,Math.sin(t*1.3+band)),4) + this.impulse*.7;
-      const light=c.createRadialGradient(port[0],port[1],0,port[0],port[1],r*.07);
-      light.addColorStop(0,this.color(energy*.32,band<2)); light.addColorStop(1,this.color(0));
-      c.fillStyle=light; c.fillRect(port[0]-r*.08,port[1]-r*.08,r*.16,r*.16);
-      const angle=Math.atan2(port[1]-cy,port[0]-cx);
-      for(let layer=0;layer<4;layer++) this.arc(cx,cy,r*(.94+layer*.014),angle-.035,angle+.035,energy/(1+layer*.3),1.2,band<2);
-    }
-    c.restore();
+    this.drawEmission(cx,cy,r);
     for (let i = 0; i < 180; i++) {
       const a = i / 180 * TAU, major = i % 15 === 0;
       this.line(cx + Math.cos(a) * r * 1.075, cy + Math.sin(a) * r * 1.075, cx + Math.cos(a) * r * (major ? 1.112 : 1.088), cy + Math.sin(a) * r * (major ? 1.112 : 1.088), major ? .48 : .17, .5);
@@ -269,6 +263,33 @@ export class Observatory {
     }
     this.text('0 1 — 0 5', cx - r * .55, cy - r * .97, 7, .35);
     c.save(); c.translate(cx - r * 1.075, cy + 45); c.rotate(-Math.PI / 2); this.text('LOCAL / LIVE / READ ONLY', 0, 0, 6, .35); c.restore();
+  }
+  drawEmission(cx,cy,r){
+    if(!this.metricStreams||!this.gravityLayout||this.config.glow<=0)return;
+    const c=this.ctx,f=this.gravityLayout;
+    c.save();c.globalCompositeOperation='lighter';c.lineCap='round';c.lineJoin='round';
+    for(let band=0;band<5;band++){
+      const rgb=this.channelColors[band],channel=this.channels[band];
+      const selected=this.highlightedMetric===metricChannels[band].key;
+      const strength=(channel.available ? .20+channel.level*.55 : .035)*this.config.glow*(selected ? 1.5 : this.highlightedMetric ? .25 : 1);
+      for(let lane=0;lane<12;lane+=2){
+        const stream=this.metricStreams[band][lane];
+        const progress=(this.channelTimes[band]*.28+lane*.173+band*.137)%1;
+        const head=.015+progress*.30,tail=Math.max(0,head-.075);
+        const points=Array.from({length:9},(_,i)=>{const p=sampleGravityStream(stream,tail+(head-tail)*i/8);return {x:f.x+p.x*f.scale,y:f.y+p.y*f.scale};});
+        const start=points[0],end=points[8],fade=Math.sin(progress*Math.PI)**.7*(1-progress*.65);
+        const width=r*(.007+progress*progress*.045);
+        const color=a=>`rgba(${rgb.join(',')},${a})`;
+        for(const [spread,alpha] of [[3,.10],[1.5,.23],[.25,.6]]){
+          const light=c.createLinearGradient(start.x,start.y,end.x,end.y);
+          light.addColorStop(0,color(0));light.addColorStop(.5,color(strength*fade*alpha*.45));light.addColorStop(.82,color(strength*fade*alpha));light.addColorStop(1,color(0));
+          c.strokeStyle=light;c.lineWidth=Math.max(.6,width*spread);
+          c.shadowColor=color(strength*fade*.25);c.shadowBlur=width*spread*1.2;
+          c.beginPath();points.forEach((p,i)=>{if(i)c.lineTo(p.x,p.y);else c.moveTo(p.x,p.y);});c.stroke();
+        }
+      }
+    }
+    c.restore();
   }
   getPosition(p, t, fcx, cy, fw, scale) {
     const motionTime = this.channelTimes[p.band];
@@ -308,8 +329,8 @@ export class Observatory {
         const target={x:(anchor.x+4-fcx)/scale,y:(anchor.y+(v-.5)*(anchor.height||36)*.66-cy)/scale};
         if(this.config.mode==='threebody'){
           const port=emissionPort({v,band,a:lane*2.39996+band},t,core);
-          const speed=.95+.15*Math.sin(lane*1.37),angle=port.angle*.84;
-          return traceMetricTransport({x:(port.x-fcx)/scale,y:(port.y-cy)/scale},{vx:Math.cos(angle)*speed,vy:Math.sin(angle)*speed},wells,target,this.config.gravityStrength||1,lane%wells.length,lane%2?1:-1);
+          const speed=.95+.15*Math.sin(lane*1.37),angle=port.angle;
+          return traceMetricTransport({x:(port.x-fcx)/scale,y:(port.y-cy)/scale},{vx:Math.cos(angle)*speed,vy:Math.sin(angle)*speed},wells,target,this.config.gravityStrength||1,lane%wells.length,lane%2?1:-1,this.radius*.22/scale);
         }
         const p={v,band,w:.3,a:lane*2.39996};
         const points=Array.from({length:80},(_p,i)=>{const [x,y]=transportPosition(p,.16+i/79*.62,t,core,field,this.config.mode);return {x:(x-fcx)/scale,y:(y-cy)/scale};});
@@ -409,33 +430,27 @@ export class Observatory {
     this.text(modes.find(m => m.id === this.config.mode)?.en || '', fcx, cy + scale * 1.24, 7, .45, 'center');
   }
   drawBlackHole(x,y,radius,glow,hot){
-    const r=Math.round(radius*2)/2,g=Math.round(clamp(glow,0,2.5)*10)/10,key=`${r}:${g}:${hot}`;
+    const rgb=((hot?this.haloHotRgb:this.haloRgb)||this.rgb).map(v=>Math.min(255,Math.round(v/4)*4));
+    const tint=(alpha,white=0)=>`rgba(${rgb.map(v=>Math.round(v+(255-v)*white)).join(',')},${alpha})`;
+    const r=Math.round(radius*2)/2,g=Math.round(clamp(glow,0,2.5)*10)/10,key=`${r}:${g}:${hot}:${rgb.join(',')}`;
     let sprite=this.haloCache.get(key);
     if(!sprite){
-      sprite=document.createElement('canvas');sprite.width=sprite.height=Math.ceil(r*5.5*2);
+      sprite=document.createElement('canvas');sprite.width=sprite.height=Math.ceil(r*7*2);
       const c=sprite.getContext('2d'),extent=sprite.width/4;
       c.setTransform(2,0,0,2,sprite.width/2,sprite.height/2);
-      const bloom=c.createRadialGradient(0,0,r*.95,0,0,r*2.6);
-      bloom.addColorStop(0,'rgba(255,176,89,0)');
-      bloom.addColorStop(.12,`rgba(255,161,62,${.15*g})`);
-      bloom.addColorStop(.4,`rgba(213,83,23,${.05*g})`);
-      bloom.addColorStop(1,'rgba(180,60,12,0)');
+      const bloom=c.createRadialGradient(0,0,r*.96,0,0,r*3.1);
+      bloom.addColorStop(0,tint(.72,.22));
+      bloom.addColorStop(.045,tint(Math.min(.98,.65+g*.22),.30));
+      bloom.addColorStop(.12,tint(.48*g,.10));
+      bloom.addColorStop(.27,tint(.20*g));
+      bloom.addColorStop(.5,tint(.065*g));
+      bloom.addColorStop(.76,tint(.012*g));
+      bloom.addColorStop(1,tint(0));
       c.fillStyle=bloom;c.fillRect(-extent,-extent,extent*2,extent*2);
-      // A broad, uneven luminous crescent surrounds the shadow. It has no
-      // tilted orbit bands; the thin inner photon rim remains part of the halo.
-      const peak=hot?Math.PI*.72:-Math.PI*.28;
-      c.globalCompositeOperation='lighter';
-      for(let i=0;i<96;i++){
-        const a=i/96*TAU,bright=Math.pow((1+Math.cos(a-peak))/2,2.2);
-        c.strokeStyle=`rgba(255,${Math.round(144+bright*82)},${Math.round(65+bright*108)},${.12+bright*.76})`;
-        c.shadowColor=`rgba(255,150,58,${.22*g})`;c.shadowBlur=r*(.18+.22*g);
-        c.lineWidth=r*(.10+bright*.24);c.beginPath();c.arc(0,0,r*(1.11+bright*.035),a,a+TAU/96+.008);c.stroke();
-      }
-      c.shadowBlur=0;
-      c.strokeStyle='rgba(255,237,204,.46)';c.lineWidth=Math.max(.55,r*.035);
-      c.beginPath();c.arc(0,0,r*1.025,0,TAU);c.stroke();
+      // The supplied reference is a clear circular shadow surrounded by a
+      // continuous soft halo, without crescents, orbit bands or separate rings.
       c.globalCompositeOperation='source-over';c.fillStyle='#010203';
-      c.beginPath();c.arc(-r*.018,r*.012,r,0,TAU);c.fill();
+      c.beginPath();c.arc(0,0,r,0,TAU);c.fill();
       if(this.haloCache.size>=32)this.haloCache.delete(this.haloCache.keys().next().value);
       this.haloCache.set(key,sprite);
     }
