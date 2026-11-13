@@ -4,7 +4,7 @@ const native = typeof window !== 'undefined' ? window.pulseDeck : null;
 function browserState() {
   let preferences=defaultPreferences;
   try { preferences=sanitizePreferences(JSON.parse(localStorage.getItem('pulsedeck.desktop.v2')) || {}); } catch {}
-  return { preferences, desktop: { active:false, status:'window', error:null }, displays:[{id:'primary',label:'主显示器',width:1920,height:1080}], version:'0.4.4', native:false };
+  return { preferences, desktop: { active:false, status:'window', error:null }, displays:[{id:'primary',label:'主显示器',width:1920,height:1080}], version:'0.4.5', native:false };
 }
 export function useDesktopState() {
   const [state,setState]=useState(browserState);

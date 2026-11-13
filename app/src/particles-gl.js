@@ -52,7 +52,7 @@ export class ParticleLayer {
         if(uPoints>0.5){
           float d=length(gl_PointCoord-vec2(0.5))*2.0;
           if(d>1.0) discard;
-          a*=exp(-d*d*5.5)*0.40;
+          a*=exp(-d*d*4.0)*0.75+exp(-d*d*1.8)*0.50;
         }
         gl_FragColor=vec4(vColor.rgb,a);
       }`);
@@ -75,7 +75,7 @@ export class ParticleLayer {
         precision mediump float;uniform vec3 uCore;uniform float uHeight;
         varying vec4 vTint;varying vec2 vPosition;varying float vEdge;
         void main(){if(vPosition.x<uCore.x-uCore.z||vPosition.y<8.||vPosition.y>uHeight-8.)discard;
-          float alpha=vTint.a*(1.-smoothstep(0.45,1.,abs(vEdge)));
+          float alpha=vTint.a*0.22*(1.-smoothstep(0.45,1.,abs(vEdge)));
           if(distance(vPosition,uCore.xy)<uCore.z*0.92)alpha*=0.18;
           gl_FragColor=vec4(vTint.rgb,alpha);}`);
       this.quadProgram=gl.createProgram();gl.attachShader(this.quadProgram,vertex);gl.attachShader(this.quadProgram,fragment);gl.linkProgram(this.quadProgram);
@@ -106,9 +106,10 @@ export class ParticleLayer {
     gl.enableVertexAttribArray(this.position); gl.vertexAttribPointer(this.position, 2, gl.FLOAT, false, 24, 0);
     gl.enableVertexAttribArray(this.color); gl.vertexAttribPointer(this.color, 4, gl.FLOAT, false, 24, 8);
     gl.uniform2f(this.uniforms.uResolution, width, height); gl.uniform3f(this.uniforms.uCore, cx, cy, radius * 1.02); gl.uniform1f(this.uniforms.uHeight, height);
-    gl.uniform1f(this.uniforms.uPointSize, (1.1 + glow * 2.4) * this.dpr);
+    gl.uniform1f(this.uniforms.uPointSize, (2.0 + glow * 2.5) * this.dpr);
     if(!this.quadProgram){gl.uniform1f(this.uniforms.uPoints, 0);gl.drawArrays(gl.LINES,0,count*2);}
-    if (glow > 0) { gl.uniform1f(this.uniforms.uPoints, 1); gl.drawArrays(gl.POINTS, 0, count * 2); }
+    gl.vertexAttribPointer(this.position,2,gl.FLOAT,false,48,0);gl.vertexAttribPointer(this.color,4,gl.FLOAT,false,48,8);
+    gl.uniform1f(this.uniforms.uPoints,1);gl.drawArrays(gl.POINTS,0,count);
   }
   dispose() {
     this.canvas?.removeEventListener('webglcontextlost', this.lost);

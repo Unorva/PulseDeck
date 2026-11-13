@@ -9,9 +9,12 @@ export function wellPosition(index, time, x, y, scale) {
   const radius=.39+Math.sin(time*.17+index)*.045;
   return [x + Math.cos(angle) * scale * radius, y + Math.sin(angle) * scale * radius*.78 +Math.sin(time*.27+index)*scale*.035];
 }
+export function emissionEnvelope(v){return Math.max(0,Math.cos((clamp(v,0,1)-.5)*Math.PI))**1.7;}
 export function emissionPort(p,time,core){
-  const angle=(p.v-.5)*1.18+Math.sin(time*.16+p.band*.65)*.105+Math.sin(p.a+time*.31)*.035;
-  return {x:core.x+Math.cos(angle)*core.radius*1.025,y:core.y+Math.sin(angle)*core.radius*1.025,angle};
+  const center=Math.sin(time*.09)*.16+Math.sin(time*.045+.9)*.08;
+  const spread=.82+Math.sin(time*.07)*.12;
+  const angle=center+(p.v-.5)*2*spread+Math.sin(p.a+time*.18+p.band*.4)*.022;
+  return {x:core.x+Math.cos(angle)*core.radius*1.025,y:core.y+Math.sin(angle)*core.radius*1.025,angle,opacity:emissionEnvelope(p.v)};
 }
 export function portPosition(band, time, core) {
   const angle = (band - 2) * .22 + Math.sin(time * .13 + band) * .055;
@@ -21,8 +24,8 @@ export function portPosition(band, time, core) {
 // ring outlet, and continues along the selected engine's path. Both renderers
 // consume this same curve, so there is no visual seam at the circle boundary.
 export function transportPosition(p, phase, time, core, field, mode) {
-  const source = mode === 'signal' ? emissionPort(p, time, core) : null;
-  let port = source ? [source.x, source.y] : portPosition(p.band, time, core);
+  const source = emissionPort(p, time, core);
+  let port = [source.x, source.y];
   const noise = (p.v - .5) * 15 + Math.sin(p.a + time * .4) * 1.5;
   port[1] += noise * .18;
   if (phase < .16) {

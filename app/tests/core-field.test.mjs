@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { bezier, portPosition, transportPosition, waveEnergy } from '../src/core-field.js';
+import { bezier, portPosition, transportPosition, waveEnergy,emissionPort,emissionEnvelope } from '../src/core-field.js';
 const core = { x: 300, y: 300, radius: 220 };
 const field = { x: 900, y: 300, width: 600, scale: 200 };
 const particle = { band: 2, v: .5, w: .3, a: 1.2 };
@@ -28,4 +28,11 @@ test('neural impulse propagates outward and decays rather than lighting everythi
   assert.ok(waveEnergy({ x: 170, y: 0 }, wave, 2, 100) > .4);
   assert.ok(waveEnergy({ x: 0, y: 0 }, wave, 2, 100) < .01);
   assert.equal(waveEnergy({ x: 170, y: 0 }, wave, 6, 100), 0);
+});
+test('emission fades toward both sector edges and its source moves gradually around the ring',()=>{
+ assert.ok(emissionEnvelope(0)<1e-10&&emissionEnvelope(1)<1e-10);assert.equal(emissionEnvelope(.5),1);
+ assert.ok(emissionEnvelope(.1)<emissionEnvelope(.25)&&emissionEnvelope(.25)<emissionEnvelope(.5));
+ const a=emissionPort(particle,0,core),b=emissionPort(particle,12,core);
+ assert.ok(Math.hypot(a.x-b.x,a.y-b.y)>10);
+ for(const port of [a,b])assert.ok(Math.abs(Math.hypot(port.x-core.x,port.y-core.y)-core.radius*1.025)<1e-6);
 });

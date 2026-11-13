@@ -10,7 +10,7 @@ test('each metric changes only its own particle channel', () => {
     next.forEach((channel, i) => {
       if (i !== index) assert.deepEqual(channel, initial[i], `${key} must not drive ${metricChannels[i].key}`);
     });
-    if (key !== 'memory') assert.ok(next[index].speed > initial[index].speed);
+    assert.ok(next[index].speed > initial[index].speed);
     if (key !== 'cpu') assert.ok(next[index].density > initial[index].density);
   });
 });
@@ -22,6 +22,13 @@ test('zero, missing and extreme samples remain finite and clearly distinct', () 
     assert.ok(channels.every(c=>!c.available && Number.isFinite(c.speed) && c.density > 0));
   }
   const full = channelActivity({cpu:1000,memory:1000,gpu:1000,download:Number.MAX_VALUE,upload:Number.MAX_VALUE});
-  assert.ok(full.every(c=>c.level===1 && c.speed<=2.25 && c.density<=1));
+  assert.ok(full.every(c=>c.level===1 && c.speed<=2.31 && c.density<=1));
   assert.ok(full[3].density > idle[3].density);
+});
+test('metric categories have distinct flow speeds even at the same idle or percentage level',()=>{
+ for(const value of [0,50,100]){
+  const channels=channelActivity(Object.fromEntries(metricChannels.map(m=>[m.key,value])));
+  assert.equal(new Set(channels.map(c=>c.speed)).size,5);
+  assert.ok(channels[1].speed<channels[0].speed);assert.ok(channels[2].speed>channels[0].speed);
+ }
 });

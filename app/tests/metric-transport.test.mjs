@@ -39,8 +39,8 @@ test('ring particles have a visible outward normal launch before gravity bends t
 });
 test('channel clocks advance only the matching particles on the actual renderer path',()=>{
  const streams=Array.from({length:5},(_,i)=>[traceMetricTransport({x:-1.8,y:0},{vx:1,vy:0},[{x:0,y:0}],{x:1.7,y:(i-2)*.4})]);
- const engine={channelTimes:Array(5).fill(10),metricStreams:streams,config:{paused:false}};
- const particles=Array.from({length:5},(_,band)=>({u:.2,v:.5,w:.3,band}));
+ const engine={channelTimes:Array(5).fill(10),metricStreams:streams,config:{paused:false},t:10,cx:300,cy:300,radius:220,arrivals:[0,0,0,0,0]};
+ const particles=Array.from({length:5},(_,band)=>({u:.2,v:.5,w:.3,a:1.2,band}));
  const positions=particles.map(p=>Observatory.prototype.getPosition.call(engine,p,10,900,300,600,200));
  engine.channelTimes[0]+=.2;
  const moved=particles.map(p=>Observatory.prototype.getPosition.call(engine,p,10,900,300,600,200));
