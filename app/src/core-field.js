@@ -10,17 +10,16 @@ export function wellPosition(index, time, x, y, scale) {
   return [x + Math.cos(angle) * scale * radius, y + Math.sin(angle) * scale * radius*.78 +Math.sin(time*.27+index)*scale*.035];
 }
 export function emissionEnvelope(v){return Math.max(0,Math.cos((clamp(v,0,1)-.5)*Math.PI))**1.7;}
-// Staggered packets cross the rim radially; their phases never form a fixed
-// illuminated grid on the concentric guide rings.
-export function rimDataParticle(index,motionTime,time,core,ringWidth=1.4){
+// Only the transport outlet layer emits. All packets share the main field's
+// drifting emission sector, leaving the other concentric rings intact.
+export function rimDataParticle(index,motionTime,time,core){
   const seed=(index*.61803398875)%1;
   const phase=((index*.38196601125+motionTime*(.19+seed*.13))%1+1)%1;
-  const angle=index*2.3999632297+Math.sin(time*.11+index*1.73)*.055;
-  const start=.86-(ringWidth-1)*.025,reach=.34+seed*.16;
+  const source=emissionPort({v:seed,a:index*2.3999632297,band:index%5},time,core);
+  const angle=source.angle,start=1.025,reach=.28+seed*.16;
   const radius=core.radius*(start+phase*reach);
   const nx=Math.cos(angle),ny=Math.sin(angle);
-  const outward=Math.max(0,nx),flow=.35+outward**3*.65;
-  const opacity=Math.sin(phase*Math.PI)**1.35*flow;
+  const opacity=Math.sin(phase*Math.PI)**1.35*source.opacity;
   const tail=core.radius*(.008+seed*.018)*( .7+phase*.6);
   return {x:core.x+nx*radius,y:core.y+ny*radius,
     tailX:core.x+nx*(radius-tail),tailY:core.y+ny*(radius-tail),

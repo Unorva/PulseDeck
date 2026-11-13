@@ -238,13 +238,14 @@ export class Observatory {
       }
     }
     const ringWidth=this.config.ringWidth||1.4;
-    for (let j = 0; j < 4; j++) {
-      const rr = r * (.86-(ringWidth-1)*.025+j*.048*ringWidth);
-      this.arc(cx, cy, rr, 0, TAU, .045+j*.004, .45);
+    const innerRing=.87-(ringWidth-1)*.025;
+    for (let j = 0; j < 12; j++) {
+      const rr = r * (innerRing+(1.025-innerRing)*j/11);
+      this.arc(cx, cy, rr, 0, TAU, j===11?.32:j%3===0?.23:.11, j===11?.85:j%3===0?.65:.45);
     }
     for (let i = 0; i < 180; i++) {
       const a = i / 180 * TAU, major = i % 15 === 0;
-      if(major)this.line(cx + Math.cos(a) * r * 1.075, cy + Math.sin(a) * r * 1.075, cx + Math.cos(a) * r * 1.092, cy + Math.sin(a) * r * 1.092, .14, .5);
+      this.line(cx + Math.cos(a) * r * 1.075, cy + Math.sin(a) * r * 1.075, cx + Math.cos(a) * r * (major?1.11:1.086), cy + Math.sin(a) * r * (major?1.11:1.086), major?.36:.12, .5);
     }
     this.drawRimComputation(cx,cy,r);
     this.text('0 1 — 0 5', cx - r * .55, cy - r * .97, 7, .35);
@@ -255,8 +256,8 @@ export class Observatory {
     c.save();c.globalCompositeOperation='lighter';c.lineCap='round';
     for(let band=0;band<5;band++){
       const rgb=this.channelColors[band],channel=this.channels[band],packets=[];
-      for(let i=band;i<480;i+=5){
-        const p=rimDataParticle(i,this.channelTimes[band],this.t,core,this.config.ringWidth||1.4);
+      for(let i=band;i<240;i+=5){
+        const p=rimDataParticle(i,this.channelTimes[band],this.t,core);
         if(p.opacity<.018)continue;
         p.bucket=Math.min(5,Math.floor(p.opacity*6));packets.push(p);
       }
