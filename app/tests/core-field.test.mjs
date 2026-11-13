@@ -15,17 +15,23 @@ test('rim data moves outward with radial tails and fades at both ends of its tra
  assert.ok(rimDataParticle(0,1,0,core).radius!==rimDataParticle(1,1,0,core).radius);
 });
 
-test('radial data bars stay on the output-ring surface and never extend beyond it',()=>{
- for(const time of [0,12,80])for(let index=0;index<360;index++){
-  const lane=index%120,p=rimDataParticle(index,1,time,core),v=(lane+.5)/120;
+test('radial data bars cover the full ring width and continue into exterior diffusion',()=>{
+ for(const width of [.8,1.4,1.8]){
+ const inner=.87-(width-1)*.025,surface=[],exterior=[];
+ for(const time of [0,12,80])for(let index=0;index<720;index++){
+  const lane=index%120,p=rimDataParticle(index,1,time,core,width),v=(lane+.5)/120;
   const port=emissionPort({v,a:lane*2.3999632297,band:index%5},time,core);
   const angle=Math.atan2(p.y-core.y,p.x-core.x);
   assert.ok(Math.abs(angle-port.angle)<1e-10);
-  assert.ok(p.x>core.x&&p.radius>=core.radius*.975);
-  assert.ok(p.radius<=core.radius*1.025,'data bars must be on the ring, not outside it');
-  assert.ok(Math.hypot(p.tailX-core.x,p.tailY-core.y)>=core.radius*.975-1e-8,'tails must stay in the output layer');
+  assert.ok(p.x>core.x&&p.radius>=core.radius*inner);
+  assert.ok(p.radius<=core.radius*1.325);
+  assert.ok(Math.hypot(p.tailX-core.x,p.tailY-core.y)>=core.radius*inner-1e-8);
+  (p.exterior>0?exterior:surface).push(p.radius/core.radius);
   const tangent={x:-Math.sin(angle),y:Math.cos(angle)};
   assert.ok(Math.abs((p.x-p.tailX)*tangent.x+(p.y-p.tailY)*tangent.y)<1e-8,'each data bar must be perpendicular to the rim');
+ }
+ assert.ok(Math.min(...surface)<inner+.02&&Math.max(...surface)>1.005,'data must fill the entire ring band');
+ assert.ok(Math.max(...exterior)>1.15,'outward diffusion must remain visible outside the ring');
  }
 });
 test('Bezier transport preserves both endpoints', () => {

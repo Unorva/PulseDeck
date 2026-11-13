@@ -256,23 +256,24 @@ export class Observatory {
     c.save();c.globalCompositeOperation='lighter';c.lineCap='butt';
     for(let band=0;band<5;band++){
       const rgb=this.channelColors[band],channel=this.channels[band],packets=[];
-      for(let i=band;i<360;i+=5){
-        const p=rimDataParticle(i,this.channelTimes[band],this.t,core);
+      for(let i=band;i<720;i+=5){
+        const p=rimDataParticle(i,this.channelTimes[band],this.t,core,this.config.ringWidth||1.4);
         if(p.opacity<.018)continue;
         p.bucket=Math.min(5,Math.floor(p.opacity*6));packets.push(p);
       }
-      c.shadowColor=`rgb(${rgb.join(',')})`;c.shadowBlur=.7+this.config.glow*.6;
-      for(let bucket=0;bucket<6;bucket++){
-        const alpha=(bucket+.5)/6*(.55+channel.level*.30)*(.55+this.config.glow*.45);
-        c.strokeStyle=`rgba(${rgb.join(',')},${alpha*.75})`;c.lineWidth=.6;c.beginPath();
-        for(const p of packets)if(p.bucket===bucket){
+      c.shadowColor=`rgb(${rgb.join(',')})`;
+      for(const outside of [false,true])for(let bucket=0;bucket<6;bucket++){
+        c.shadowBlur=outside?2+this.config.glow*1.3:.7+this.config.glow*.6;
+        const alpha=(bucket+.5)/6*(.55+channel.level*.30)*(.55+this.config.glow*.45)*(outside?.8:1);
+        c.strokeStyle=`rgba(${rgb.join(',')},${alpha*.75})`;c.lineWidth=outside?.7:.6;c.beginPath();
+        for(const p of packets)if(p.bucket===bucket&&(p.exterior>0)===outside){
           const dx=p.x-p.tailX,dy=p.y-p.tailY,length=Math.hypot(dx,dy),gap=Math.min(1.2,length*.16)/Math.max(length,.001);
           c.moveTo(p.tailX,p.tailY);c.lineTo(p.tailX+dx*.38,p.tailY+dy*.38);
           c.moveTo(p.tailX+dx*(.38+gap),p.tailY+dy*(.38+gap));c.lineTo(p.x,p.y);
         }
         c.stroke();
         c.strokeStyle=`rgba(${rgb.join(',')},${alpha})`;c.lineWidth=.8;c.beginPath();
-        for(const p of packets)if(p.bucket===bucket){c.moveTo(p.x+(p.tailX-p.x)*.22,p.y+(p.tailY-p.y)*.22);c.lineTo(p.x,p.y);}
+        for(const p of packets)if(p.bucket===bucket&&(p.exterior>0)===outside){c.moveTo(p.x+(p.tailX-p.x)*.22,p.y+(p.tailY-p.y)*.22);c.lineTo(p.x,p.y);}
         c.stroke();
       }
     }
